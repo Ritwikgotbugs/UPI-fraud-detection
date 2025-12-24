@@ -1,7 +1,7 @@
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../components/logic/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -9,16 +9,74 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [balance, setBalance] = useState(10000);
+  const [transactions, setTransactions] = useState([]);
+  const [totalSpending, setTotalSpending] = useState(0);
+  const [totalReceived, setTotalReceived] = useState(0);
+
+  const fetchTransactions = async (upiId) => {
+    if (!upiId) return;
+    
+    try {
+      const txRef = collection(db, "transactions");
+      
+      // Fetch sent transactions
+      const sentQuery = query(txRef, where("senderUPI", "==", upiId));
+      const sentSnapshot = await getDocs(sentQuery);
+      const sentList = sentSnapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        transactionType: "sent"
+      }));
+      
+      // Fetch received transactions
+      const receivedQuery = query(txRef, where("recipientUPI", "==", upiId));
+      const receivedSnapshot = await getDocs(receivedQuery);
+      const receivedList = receivedSnapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
+        transactionType: "received"
+      }));
+      
+      // Combine and sort
+      const allTransactions = [...sentList, ...receivedList];
+      allTransactions.sort((a, b) => {
+        const timeA = a.createdAt?.toDate?.() || a.timestamp?.toDate?.() || new Date(0);
+        const timeB = b.createdAt?.toDate?.() || b.timestamp?.toDate?.() || new Date(0);
+        return timeB - timeA;
+      });
+      
+      const spent = sentList.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+      const received = receivedList.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+      
+      setTransactions(allTransactions);
+      setTotalSpending(spent);
+      setTotalReceived(received);
+      setBalance(10000 - spent + received);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    }
+  };
+
+  const refreshData = async () => {
+    if (userData?.upiId) {
+      await fetchTransactions(userData.upiId);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setLoading(true);
       if (currentUser) {
         setUser(currentUser);
         try {
           const userRef = doc(db, 'users', currentUser.uid);
           const userDoc = await getDoc(userRef);
           if (userDoc.exists()) {
-            setUserData(userDoc.data());
+            const data = userDoc.data();
+            setUserData(data);
+            // Fetch transactions after getting user data
+            await fetchTransactions(data.upiId);
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -26,6 +84,10 @@ export function AuthProvider({ children }) {
       } else {
         setUser(null);
         setUserData(null);
+        setTransactions([]);
+        setBalance(10000);
+        setTotalSpending(0);
+        setTotalReceived(0);
       }
       setLoading(false);
     });
@@ -34,7 +96,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      userData, 
+      loading, 
+      balance, 
+      transactions, 
+      totalSpending, 
+      totalReceived,
+      refreshData,
+      setBalance,
+      setTransactions,
+      setTotalSpending,
+      setTotalReceived
+    }}>
       {children}
     </AuthContext.Provider>
   );

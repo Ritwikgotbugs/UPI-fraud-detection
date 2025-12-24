@@ -1,7 +1,7 @@
-# 🌟SafePayAI
-SafePayAI is an advanced fraud detection and prevention application designed to safeguard digital transactions using cutting-edge artificial intelligence techniques. With seamless integration of machine learning models and user-friendly interfaces, SafePayAI offers robust solutions for real-time fraud detection and mitigation.
+# 🌟Fraudulent.ai
+Fraudulent.ai is an advanced fraud detection and prevention application designed to safeguard digital transactions using cutting-edge artificial intelligence techniques. With seamless integration of machine learning models and user-friendly interfaces, Fraudulent.ai offers robust solutions for real-time fraud detection and mitigation.
 
-By leveraging Generative Adversarial Networks (GANs) for synthetic data generation and Random Forest classifiers for accurate predictions, SafePayAI ensures unparalleled security and efficiency in transaction monitoring.
+By leveraging Generative Adversarial Networks (GANs) for synthetic data generation and Random Forest classifiers for accurate predictions, Fraudulent.ai ensures unparalleled security and efficiency in transaction monitoring.
 
 ---
 
@@ -9,7 +9,7 @@ By leveraging Generative Adversarial Networks (GANs) for synthetic data generati
 
 # 🏆 Achievements and Recognition
 - 1st Place Winner at DigiPay Pro NPCI Competition IIT Bombay Techfest 2024
-- SafePayAI proudly secured 1st place in the prestigious DigiPay Pro NPCI Competition, organized by NPCI during the IIT Bombay Techfest 2024.
+- Fraudulent.ai proudly secured 1st place in the prestigious DigiPay Pro NPCI Competition, organized by NPCI during the IIT Bombay Techfest 2024.
 
 - Event Highlights
    - 🎯 Objective:
@@ -24,7 +24,7 @@ By leveraging Generative Adversarial Networks (GANs) for synthetic data generati
   - Round 1 Submission: December 6, 2024
   - Final Presentation at IIT bombay TechFest: December 18, 2024
   
-Why SafePayAI Stood Out
+Why Fraudulent.ai Stood Out
 
 - 🚀 Innovative Approach: Combined GANs and Random Forest models to achieve 95% accuracy in fraud detection.
 - 🌍 Real-World Applicability: Designed a scalable, future-proof fraud detection solution adaptable to payment systems like UPI.
@@ -45,7 +45,7 @@ Why SafePayAI Stood Out
 ![Photo with Coordinator](https://imgur.com/XdLtx1I.png)
 
 
-*Team SafePayAI with the event coordinator at the IIT Bombay Techfest.*
+*Team Fraudulent.ai with the event coordinator at the IIT Bombay Techfest.*
 
 
 
@@ -86,13 +86,13 @@ Why SafePayAI Stood Out
 
 ![Dashboard UI](https://i.imgur.com/1mgOS8m.png)
 
-*Our SafePay AI User Dashboard UI*
+*Our Fraudulent.ai User Dashboard UI*
 
 ---
 
 ![Fraud Detection UI](https://i.imgur.com/4h5D08o.png)
 
-*Our SafePay AI Fraud Detection Warning UI*
+*Our Fraudulent.ai Fraud Detection Warning UI*
 
 ---
 
@@ -156,7 +156,7 @@ Why SafePayAI Stood Out
 
 # 📈 AI Model Workflow
 
-The core of SafePayAI lies in its AI-driven fraud detection mechanism, developed using a combination of GAN and Random Forest models. Here’s an in-depth breakdown:
+The core of Fraudulent.ai lies in its AI-driven fraud detection mechanism, developed using a combination of GAN and Random Forest models. Here’s an in-depth breakdown:
 
 ### Step 1: Data Preparation
 - **Load Dataset**: Start with a transactional dataset containing both fraudulent and non-fraudulent records. Ensure it is preprocessed (e.g., handling missing values, scaling, and encoding).

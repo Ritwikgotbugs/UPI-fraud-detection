@@ -1,4 +1,4 @@
-# SafePay AI — Frontend (React + Vite) 🔧
+# Fraudulent.ai — Frontend (React + Vite) 🔧
 
 A small React app using Vite, Tailwind and Firebase for demo UPI fraud detection UI.
 

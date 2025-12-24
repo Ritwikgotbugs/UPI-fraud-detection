@@ -1,27 +1,29 @@
-import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Check, XCircle, HelpCircle, X } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import Header from "./Header";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import SidebarContent from './SidebarContent';
-import { auth, db } from "./firebase.js";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
-import { cn } from "@/lib/utils";
-import TransactionSimulation from '../logic/TransactionSimulation'
 import {
     AlertDialog,
     AlertDialogAction,
+    AlertDialogCancel,
     AlertDialogContent,
     AlertDialogDescription,
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-  } from "@/components/ui/alert-dialog"
-  import {   AlertTriangle, ChevronRight } from 'lucide-react'
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertTriangle, Check, ChevronRight, CreditCard, FileText, IndianRupee, MessageSquare, Rocket, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle, Zap } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from '../../context/AuthContext';
+import TransactionSimulation from '../logic/TransactionSimulation';
+import Header from "./Header";
+import SidebarContent from './SidebarContent';
+import { db } from "./firebase.js";
 
 
     export default function Homepage() {
@@ -30,6 +32,18 @@ import {
         const [remarks,setRemarks]=useState()
         const [showSimulation, setShowSimulation] = useState(false);
     
+        // Prevent background scrolling when popup is open
+        useEffect(() => {
+            if (showPopup) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = 'unset';
+            }
+            return () => {
+                document.body.style.overflow = 'unset';
+            };
+        }, [showPopup]);
+
         const remarkOptions = [
             { value: "rent", label: "Rent" },
             { value: "utilities", label: "Utilities" },
@@ -5047,7 +5061,14 @@ import {
         }
     }
     ]
+    const navigate = useNavigate();
     const handleSendMoney = () => {
+        // Validate amount against balance
+        if (Number(amount) > balance) {
+          setInsufficientFunds(true);
+          return;
+        }
+        setInsufficientFunds(false);
         // Pass the transaction details to the TransactionSimulation component
         setShowSimulation(true);
     };
@@ -5062,7 +5083,21 @@ import {
     const [verificationStatus, setVerificationStatus] = useState(null); 
     const [isAlertOpen, setIsAlertOpen] = useState(false)
     
-    const [amount, setAmount] = useState(10000); 
+    const [amount, setAmount] = useState(100); 
+    const [insufficientFunds, setInsufficientFunds] = useState(false);
+    
+    // Get balance from context
+    const { user: authUser, userData, balance, refreshData } = useAuth();
+    
+    // Sync user from context
+    useEffect(() => {
+      if (authUser) {
+        setUser(authUser);
+      }
+      if (userData?.upiId) {
+        setUpiId(userData.upiId);
+      }
+    }, [authUser, userData]);
     
   
     const handleSeeWhy = async () => {
@@ -5149,7 +5184,7 @@ import {
       
           // Use env var or fallback to localhost
           const apiBase = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:5000';
-          const response = await fetch(`${apiBase}/predict`, {
+          const response = await fetch(`${apiBase}/api/predict`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -5215,53 +5250,15 @@ import {
 
 
     useEffect(() => {
-        let unsub;
-
-        // Process redirect result immediately on load
+        // Process redirect result immediately on load (for Google sign-in redirect)
         (async () => {
           try {
             const { handleRedirectResult } = await import('./auth');
-            const res = await handleRedirectResult();
-            if (res?.user) {
-              setUser(res.user);
-              setUpiId(res.upiId);
-            }
+            await handleRedirectResult();
           } catch (e) {
             console.warn('Redirect handling:', e);
           }
         })();
-
-        // Subscribe to auth state changes to keep UI in sync
-        (async () => {
-          try {
-            const { onAuthStateChanged } = await import('firebase/auth');
-            unsub = onAuthStateChanged(auth, async (currentUser) => {
-              if (currentUser) {
-                setUser(currentUser);
-                try {
-                  const userRef = doc(db, "users", currentUser.uid);
-                  const userDoc = await getDoc(userRef);
-                  if (userDoc.exists()) {
-                    setUpiId(userDoc.data().upiId);
-                  }
-                } catch (e) {
-                  console.warn('Could not fetch user document (offline or not created yet):', e.message);
-                  // User document may not exist yet (new user just signed in) or network is offline
-                  // The redirect result handler should have created it, but if not, it will be created on first interaction
-                }
-              } else {
-                setUser(null);
-                setUpiId("");
-              }
-            });
-          } catch (e) {
-            console.warn('Auth state listener setup:', e);
-          }
-        })();
-
-        return () => {
-          if (typeof unsub === 'function') unsub();
-        };
     }, []);
 
     return (
@@ -5269,279 +5266,477 @@ import {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="min-h-screen bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#0f172a] text-white"
+          className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100"
         >
           {!user ? (
             <motion.div
               initial={{ y: -20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="flex flex-col items-center justify-center min-h-screen"
+              className="flex flex-col items-center justify-center min-h-screen px-4"
             >
-              <h1 className="text-4xl font-bold mb-8 text-center">Welcome to SafePay AI</h1>
-              <Button
-                onClick={handleGoogleSignIn}
-                className="px-8 py-4 bg-blue-500 text-white font-semibold rounded-lg shadow-lg hover:bg-blue-600 transition-all duration-300"
-              >
-                Sign in with Google
-              </Button>
+              {/* Background decoration */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-100 rounded-full opacity-60 blur-3xl" />
+                <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-100 rounded-full opacity-60 blur-3xl" />
+              </div>
+              
+              <div className="relative z-10 text-center">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-2xl shadow-blue-500/30 mb-6">
+                  <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">Fraudulent.ai</h1>
+                <p className="text-lg text-slate-500 mb-8 max-w-md">AI-powered UPI payments with real-time fraud detection</p>
+                <Button
+                  onClick={handleGoogleSignIn}
+                  className="px-8 py-4 h-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300"
+                >
+                  Get Started
+                </Button>
+              </div>
             </motion.div>
           ) : (
-            <div className="flex">
-              <aside className="hidden md:flex flex-col w-72 min-h-screen border-r border-white/10 bg-black/20">
+            <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+              <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
                 <SidebarContent />
               </aside>
     
-              <main className="flex-1">
+              <main className="flex-1 overflow-y-auto">
                 <Header user={user} onSignIn={handleGoogleSignIn} />
     
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="p-6"
-                >
-                  <div className="max-w-2xl mx-auto">
-                    <Card className="border-white/10 bg-black/20 backdrop-blur-xl overflow-hidden">
-                      <CardHeader className="bg-blue-500/10 border-b border-white/10">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Button variant="ghost" size="icon" className="text-white hover:text-white/80">
-                              <ArrowLeft className="h-5 w-5" />
-                            </Button>
-                            <CardTitle className="text-lg font-medium">Pay to UPI ID</CardTitle>
-                          </div>
-                          <Button variant="ghost" size="icon" className="text-white hover:text-white/80">
-                            <HelpCircle className="h-5 w-5" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-6 space-y-8">
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.4 }}
-                          className="space-y-2"
-                        >
-                          <Label className="text-white/70">To UPI ID</Label>
-                          <div className="flex space-x-2">
-                            <Input
-                              value={recipientUpiId}
-                              onChange={(e) => {
-                                setRecipientUpiId(e.target.value);
-                                setVerificationStatus(null);
-                              }}
-                              className="flex-grow bg-white/5 border-white/10 text-white focus:ring-2 focus:ring-blue-500"
-                            />
-                            <Button
-                              onClick={handleVerifyUPI}
-                              disabled={verificationStatus === "loading"}
-                              className="bg-blue-500 hover:bg-blue-600 text-white transition-colors duration-300 disabled:opacity-50"
-                            >
-                              {verificationStatus === "loading" ? "Verifying..." : "Verify"}
-                            </Button>
-                          </div>
-                          <AnimatePresence mode="wait">
-        {verificationStatus && verificationStatus !== "idle" && (
-          <motion.div
-            key={verificationStatus}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`p-4 rounded-lg ${
-              verificationStatus === "valid"
-                ? "bg-green-100 text-green-800"
-                : verificationStatus === "loading"
-                ? "bg-blue-100 text-blue-800"
-                : "bg-red-100 text-red-800"
-            }`}
-          >
-            {verificationStatus === "loading" && (
-              <div className="flex items-center gap-2">
-                <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                <span className="font-medium">Verifying...</span>
-              </div>
-            )}
-            {verificationStatus === "valid" && (
-              <div className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-green-500" />
-                <span className="font-medium">Verified: UPI ID is valid</span>
-              </div>
-            )}
-            {verificationStatus === "fraud" && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <span className="font-medium">Fraudulent: Do not proceed</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSeeWhy}
-                  className="text-red-800 hover:bg-red-200"
-                >
-                  See Why <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-            {verificationStatus === "invalid" && (
-              <div className="flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-red-500" />
-                <span className="font-medium">Invalid UPI ID</span>
-              </div>
-            )}
-            {verificationStatus === "error" && (
-              <div className="flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-red-500" />
-                <span className="font-medium">Verification failed: Backend may be offline. Check console for details.</span>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Why is this UPI ID flagged as fraudulent?</AlertDialogTitle>
-            <AlertDialogDescription>
-              `This UPI ID has been associated with multiple reported scams and fraudulent activitiess strongly recommended not to proceed with any transactions using this ID.``
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogAction>Understood</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-                        </motion.div>
-    
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.5 }}
-                          className="space-y-2"
-                        >
-                          <Label className="text-white/70">Enter Amount</Label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70">₹</span>
-                            <Input
-                              type="number"
-                              value={amount}
-                              onChange={(e) => setAmount(e.target.value)}
-                              placeholder="0"
-                              className="pl-8 bg-white/5 border-white/10 text-white focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                        </motion.div>
-    
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.6 }}
-                          className="space-y-3"
-                        >
-                          <Label className="text-white/70">Add Remarks (Optional)</Label>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            {remarkOptions.map((option, index) => (
-                              <motion.div
-                                key={option.value}
-                                initial={{ opacity: 0, scale: 0.8 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: 0.1 * index }}
-                              >
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "h-12 w-full border-white/10 bg-white/5 hover:bg-white/10 transition-all duration-300",
-                                    remarks === option.value && "bg-blue-500 hover:bg-blue-600 border-blue-500"
-                                  )}
-                                  onClick={() => setRemarks(option.value)}
-                                >
-                                  {option.label}
-                                </Button>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      </CardContent>
-                      <CardFooter className="flex flex-col items-center justify-center bg-black/20 p-0 border-t border-white/10">
-                        <Button onClick={handleSendMoney} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-6 transition-all duration-300">
-                          Send Money
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                    {/* Transaction Simulation Component */}
-            {showSimulation  && user &&  (
-                <TransactionSimulation 
-                    upiId={recipientUpiId} 
-                    amount={amount} 
-                    remarks={remarks} 
-                    senderUPI={upiId}
-                    onClose={() => setShowSimulation(false)} // Optional: to close the simulation
-                />)}
+                <div className="p-4 md:p-6 space-y-5">
+                  {/* Page Title */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="text-2xl font-bold text-slate-800">Send Money</h1>
+                      <p className="text-slate-500 text-sm mt-0.5">Transfer funds instantly with AI protection</p>
+                    </div>
+                    
                   </div>
-                </motion.div>
+
+                  <div className="grid gap-5 lg:grid-cols-3">
+                    {/* Main Send Form - Takes 2 columns */}
+                    <div className="lg:col-span-2 space-y-5">
+                      {/* Quick Amount Selection */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                      >
+                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
+                          <CardContent className="p-5">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                                <Zap className="h-4 w-4 text-amber-500" />
+                                Quick Select
+                              </h3>
+                              <Badge variant="outline" className="text-xs text-slate-500 border-slate-200">Tap to select</Badge>
+                            </div>
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                              {[100, 200, 500, 1000, 2000, 5000].map((quickAmount) => (
+                                <Button
+                                  key={quickAmount}
+                                  variant="outline"
+                                  onClick={() => setAmount(quickAmount.toString())}
+                                  className={cn(
+                                    "h-11 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-slate-700 transition-all font-semibold",
+                                    amount === quickAmount.toString() && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
+                                  )}
+                                >
+                                  ₹{quickAmount >= 1000 ? `${quickAmount/1000}K` : quickAmount}
+                                </Button>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+
+                      {/* Transfer Form */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                      >
+                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
+                          <CardContent className="p-5 space-y-5">
+                            {/* Recipient UPI */}
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                <User className="h-4 w-4 text-blue-500" />
+                                Recipient UPI ID
+                              </label>
+                              <div className="flex gap-2">
+                                <div className="relative flex-grow">
+                                  <Input
+                                    value={recipientUpiId}
+                                    onChange={(e) => {
+                                      setRecipientUpiId(e.target.value);
+                                      setVerificationStatus(null);
+                                    }}
+                                    placeholder="name@upi or phone@paytm"
+                                    className="pl-4 pr-10 h-12 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-400 rounded-xl text-sm"
+                                  />
+                                  {recipientUpiId && (
+                                    <button 
+                                      onClick={() => { setRecipientUpiId(''); setVerificationStatus(null); }}
+                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                <Button
+                                  onClick={handleVerifyUPI}
+                                  disabled={verificationStatus === "loading" || !recipientUpiId}
+                                  className="h-12 px-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25 rounded-xl font-medium"
+                                >
+                                  {verificationStatus === "loading" ? (
+                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                                  ) : (
+                                    "Verify"
+                                  )}
+                                </Button>
+                              </div>
+                              
+                              {/* Verification Status */}
+                              <AnimatePresence mode="wait">
+                                {verificationStatus && verificationStatus !== "idle" && (
+                                  <motion.div
+                                    key={verificationStatus}
+                                    initial={{ opacity: 0, y: -10, height: 0 }}
+                                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                    exit={{ opacity: 0, y: -10, height: 0 }}
+                                    className={cn(
+                                      "p-3 rounded-xl",
+                                      verificationStatus === "valid" && "bg-emerald-50 border border-emerald-200",
+                                      verificationStatus === "loading" && "bg-blue-50 border border-blue-200",
+                                      (verificationStatus === "invalid" || verificationStatus === "error" || verificationStatus === "fraud") && "bg-red-50 border border-red-200"
+                                    )}
+                                  >
+                                    {verificationStatus === "loading" && (
+                                      <div className="flex items-center gap-3">
+                                        <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
+                                        <div>
+                                          <p className="font-medium text-blue-700 text-sm">Verifying UPI ID...</p>
+                                          <p className="text-xs text-blue-500">Checking with bank servers</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {verificationStatus === "valid" && (
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-emerald-100 rounded-full">
+                                          <Check className="h-4 w-4 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                          <p className="font-medium text-emerald-700 text-sm">UPI ID Verified</p>
+                                          <p className="text-xs text-emerald-500">Ready to send money</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {verificationStatus === "fraud" && (
+                                      <div className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="p-2 bg-red-100 rounded-full">
+                                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                                          </div>
+                                          <div>
+                                            <p className="font-medium text-red-700 text-sm">Fraud Alert</p>
+                                            <p className="text-xs text-red-500">This UPI ID is flagged as suspicious</p>
+                                          </div>
+                                        </div>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={handleSeeWhy}
+                                          className="text-red-600 border-red-200 hover:bg-red-100 text-xs"
+                                        >
+                                          View Details <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                                        </Button>
+                                      </div>
+                                    )}
+                                    {verificationStatus === "invalid" && (
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-red-100 rounded-full">
+                                          <XCircle className="h-4 w-4 text-red-600" />
+                                        </div>
+                                        <div>
+                                          <p className="font-medium text-red-700 text-sm">Invalid UPI ID</p>
+                                          <p className="text-xs text-red-500">Please check and try again</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {verificationStatus === "error" && (
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-red-100 rounded-full">
+                                          <XCircle className="h-4 w-4 text-red-600" />
+                                        </div>
+                                        <div>
+                                          <p className="font-medium text-red-700 text-sm">Verification Failed</p>
+                                          <p className="text-xs text-red-500">Network error, please retry</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+
+                              <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
+                                <AlertDialogContent className="bg-white rounded-2xl">
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle className="text-slate-800 flex items-center gap-2">
+                                      <ShieldAlert className="h-5 w-5 text-red-500" />
+                                      Fraud Warning
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription className="text-slate-600">
+                                      This UPI ID has been associated with reported scams and fraudulent activities. Our AI system strongly recommends not proceeding with this transaction.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel className="border-slate-200">Cancel</AlertDialogCancel>
+                                    <AlertDialogAction className="bg-red-500 hover:bg-red-600">I Understand the Risk</AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+
+                            {/* Amount Input */}
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                <IndianRupee className="h-4 w-4 text-blue-500" />
+                                Amount
+                              </label>
+                              <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-bold">₹</span>
+                                <Input
+                                  type="number"
+                                  value={amount}
+                                  onChange={(e) => {
+                                    setAmount(e.target.value);
+                                    setInsufficientFunds(Number(e.target.value) > balance);
+                                  }}
+                                  placeholder="0"
+                                  className={cn(
+                                    "pl-12 text-3xl font-bold h-16 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-300 focus:bg-white rounded-xl",
+                                    insufficientFunds && "border-red-300 bg-red-50/50 focus:border-red-400"
+                                  )}
+                                />
+                              </div>
+                              {insufficientFunds && (
+                                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                                  <AlertTriangle className="h-4 w-4 text-red-500" />
+                                  <p className="text-red-600 text-sm font-medium">
+                                    Insufficient balance. Available: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
+                              )}
+                              {amount && !insufficientFunds && Number(amount) > 0 && (
+                                <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                  <Check className="h-4 w-4 text-emerald-500" />
+                                  <p className="text-emerald-600 text-sm">
+                                    Balance after: <span className="font-semibold">₹{(balance - Number(amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Category Selection */}
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                <MessageSquare className="h-4 w-4 text-blue-500" />
+                                Category
+                              </label>
+                              <div className="grid grid-cols-5 gap-2">
+                                {remarkOptions.map((option) => (
+                                  <Button
+                                    key={option.value}
+                                    variant="outline"
+                                    className={cn(
+                                      "h-10 border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-slate-600 rounded-xl text-xs font-medium",
+                                      remarks === option.value && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
+                                    )}
+                                    onClick={() => setRemarks(option.value)}
+                                  >
+                                    {option.label}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Note Input */}
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-blue-500" />
+                                Note <span className="text-slate-400 font-normal text-xs">(optional)</span>
+                              </label>
+                              <Input
+                                placeholder="What's this payment for?"
+                                className="h-12 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:bg-white rounded-xl"
+                              />
+                            </div>
+
+                            {/* Submit Button */}
+                            <Button 
+                              onClick={handleSendMoney} 
+                              disabled={insufficientFunds || !amount || Number(amount) <= 0 || !recipientUpiId || verificationStatus !== "valid"}
+                              className={cn(
+                                "w-full h-14 text-base font-semibold rounded-xl transition-all gap-2",
+                                insufficientFunds || !amount || Number(amount) <= 0 || !recipientUpiId || verificationStatus !== "valid"
+                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                  : "bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 text-white hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 shadow-xl shadow-blue-500/25"
+                              )}
+                            >
+                              {insufficientFunds ? (
+                                <><AlertTriangle className="h-5 w-5" /> Insufficient Balance</>
+                              ) : !recipientUpiId ? (
+                                <><User className="h-5 w-5" /> Enter UPI ID</>
+                              ) : verificationStatus !== "valid" ? (
+                                <><ShieldCheck className="h-5 w-5" /> Verify UPI First</>
+                              ) : !amount || Number(amount) <= 0 ? (
+                                <><IndianRupee className="h-5 w-5" /> Enter Amount</>
+                              ) : (
+                                <><Rocket className="h-5 w-5" /> Send ₹{Number(amount).toLocaleString('en-IN')}</>
+                              )}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    </div>
+
+                    {/* Side Panel - Right Column */}
+                    <div className="space-y-5">
+                      {/* Balance Card */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                      >
+                        <Card className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 border-0 text-white overflow-hidden relative">
+                          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+                          <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+                          <CardContent className="p-5 relative">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">Available Balance</p>
+                                <p className="text-3xl font-bold">₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="p-3 bg-white/10 rounded-xl">
+                                  <Wallet className="h-6 w-6 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
+                              <CreditCard className="h-4 w-4 text-blue-200" />
+                              <span className="text-blue-100 text-sm">{upiId || 'No UPI ID set'}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+
+                   </div>  
+                  </div>
+                    
+                  {/* Transaction Simulation */}
+                  {showSimulation && user && (
+                    <TransactionSimulation 
+                      upiId={recipientUpiId} 
+                      amount={amount} 
+                      remarks={remarks} 
+                      senderUPI={upiId}
+                      onClose={() => setShowSimulation(false)}
+                    />
+                  )}
+                </div>
               </main>
             </div>
           )}
     
-          <AnimatePresence>
-            {showPopup && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-50"
-              >
+          {/* Transaction Details Popup - Using Portal to render to body */}
+          {createPortal(
+            <AnimatePresence>
+              {showPopup && (
                 <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  className="bg-white rounded-lg shadow-xl max-w-md w-full m-4 overflow-hidden"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-2xl"
+                  style={{ zIndex: 9999 }}
+                  onClick={() => setShowPopup(false)}
                 >
-                  <div className="flex justify-between items-center p-4 border-b border-gray-200">
-                    <h2 className="text-2xl font-bold text-gray-800">Transaction Details</h2>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setShowPopup(false)}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      <X className="h-6 w-6" />
-                    </Button>
-                  </div>
-                  <div className="p-6 max-h-[60vh] overflow-y-auto">
-                    {transactionData.length > 0 ? (
-                      <ul className="space-y-4">
-                        {transactionData.map(([key, value], index) => (
-                          <motion.li
-                            key={key}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            className="bg-gray-50 p-3 rounded-md"
-                          >
-                            <span className="font-semibold text-gray-700">{key}:</span>{" "}
-                            <span className="text-gray-600">{value}</span>
-                          </motion.li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-gray-600">No data found</p>
-                    )}
-                  </div>
-                  <div className="p-4 bg-gray-50 border-t border-gray-200">
-                    <Button
-                      onClick={() => setShowPopup(false)}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-md transition-all duration-300"
-                    >
-                      Close
-                    </Button>
-                  </div>
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                    className="bg-white rounded-2xl shadow-2xl max-w-lg w-full m-4 overflow-hidden border border-slate-200/50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="relative bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 p-5">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                      <div className="relative flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white/20 rounded-xl">
+                            <FileText className="h-5 w-5 text-white" />
+                          </div>
+                          <h2 className="text-xl font-bold text-white">Transaction Details</h2>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setShowPopup(false)}
+                          className="text-white/80 hover:text-white hover:bg-white/20 rounded-xl"
+                        >
+                          <X className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-5 max-h-[50vh] overflow-y-auto">
+                      {transactionData.length > 0 ? (
+                        <div className="space-y-3">
+                          {transactionData.map(([key, value], index) => (
+                            <motion.div
+                              key={key}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.03 }}
+                              className="flex items-start justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors"
+                            >
+                              <span className="text-sm font-medium text-slate-500">{key}</span>
+                              <span className="text-sm font-semibold text-slate-800 text-right max-w-[60%]">{String(value)}</span>
+                            </motion.div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <div className="p-4 bg-slate-100 rounded-full mb-4">
+                            <FileText className="h-8 w-8 text-slate-400" />
+                          </div>
+                          <p className="text-slate-500 font-medium">No data found</p>
+                          <p className="text-slate-400 text-sm mt-1">Transaction details unavailable</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="p-4 bg-slate-50 border-t border-slate-100">
+                      <Button
+                        onClick={() => setShowPopup(false)}
+                        className="w-full h-12 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </motion.div>
                 </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+            </AnimatePresence>,
+            document.body
+          )}
         </motion.div>
       );
     }

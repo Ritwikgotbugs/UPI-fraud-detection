@@ -1,19 +1,123 @@
-import {
-  Search,
-  Bell,
-  CreditCard,
-  Menu,
-} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import {
+    ArrowDownLeft,
+    ArrowUpRight,
+    Bell,
+    Menu,
+    Search,
+    Wallet,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "../../context/AuthContext";
+import { db } from "./firebase";
 import SidebarContent from './SidebarContent';
-import { useState } from "react";
 
 const Header = ({ user, onSignIn }) => {
+  const { userData } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const notificationRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Fetch notifications for current user
+  useEffect(() => {
+    if (!userData?.upiId) return;
+
+    let unsubscribe = null;
+
+    const setupListener = async () => {
+      try {
+        const notifRef = collection(db, "notifications");
+        const notifQuery = query(
+          notifRef,
+          where("recipientUPI", "==", userData.upiId)
+        );
+
+        unsubscribe = onSnapshot(
+          notifQuery, 
+          (snapshot) => {
+            const notifList = snapshot.docs.map(d => ({
+              id: d.id,
+              ...d.data(),
+            }));
+            notifList.sort((a, b) => {
+              const timeA = a.createdAt?.toDate?.() || new Date(0);
+              const timeB = b.createdAt?.toDate?.() || new Date(0);
+              return timeB - timeA;
+            });
+            setNotifications(notifList);
+            setUnreadCount(notifList.filter(n => !n.read).length);
+          },
+          (error) => {
+            console.error("Error fetching notifications:", error);
+            setNotifications([]);
+            setUnreadCount(0);
+          }
+        );
+      } catch (error) {
+        console.error("Error setting up notification listener:", error);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [userData?.upiId]);
+
+  const markAsRead = async (notifId) => {
+    try {
+      await updateDoc(doc(db, "notifications", notifId), { read: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifs = notifications.filter(n => !n.read);
+      await Promise.all(
+        unreadNotifs.map(n => updateDoc(doc(db, "notifications", n.id), { read: true }))
+      );
+    } catch (error) {
+      console.error("Error marking all as read:", error);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${days}d ago`;
+  };
 
   const handleSearch = (e) => {
     const query = e.target.value.toLowerCase();
@@ -33,54 +137,126 @@ const Header = ({ user, onSignIn }) => {
   };
 
   return (
-    <header className="sticky top-0 z-10 backdrop-blur-xl bg-black/20 border-b border-white/10">
-      <div className="flex items-center justify-between px-6 py-4">
+    <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-xl border-b border-slate-200/50 shadow-sm">
+      <div className="flex items-center justify-between px-6 py-3">
         <div className="flex items-center">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden mr-2">
+              <Button variant="ghost" size="icon" className="md:hidden mr-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0 bg-[#0f172a] border-r border-white/10">
+            <SheetContent side="left" className="w-72 p-0 bg-white border-r border-slate-200">
               <SidebarContent />
             </SheetContent>
           </Sheet>
-          <div className="flex items-center md:hidden">
-            <CreditCard className="h-8 w-8 text-blue-400" />
-            <span className="ml-2 text-xl font-bold text-blue-400">safepayAI</span>
+          <div className="flex items-center md:hidden gap-2">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+              <Wallet className="h-4 w-4 text-white" />
+            </div>
+            <span className="text-lg font-bold text-slate-800">SafePay<span className="text-blue-600">AI</span></span>
           </div>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-white/50" />
+        <div className="flex items-center space-x-3">
+          <div className="relative hidden sm:block">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
               type="text"
-              placeholder="Quick search..."
+              placeholder="Search..."
               value={searchQuery}
               onChange={handleSearch}
-              className="pl-9 w-64 bg-white/5 border-white/10 text-white placeholder:text-white/50 focus:bg-white/10"
+              className="pl-9 w-56 h-9 bg-slate-50 border-slate-200 text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-blue-300 rounded-lg"
             />
             {searchResults.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-50">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
                 {searchResults.map(r => (
-                  <div key={r.id} className="px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 cursor-pointer border-b border-gray-700 last:border-b-0">
-                    <span className="text-blue-400 text-xs font-semibold">{r.type}</span>: {r.value}
+                  <div key={r.id} className="px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0">
+                    <span className="text-blue-600 text-xs font-medium">{r.type}</span>
+                    <p className="text-slate-700">{r.value}</p>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="text-white/70 hover:text-white">
-            <Bell className="h-5 w-5" />
-          </Button>
+          <div ref={notificationRef} className="relative">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="text-slate-500 hover:text-slate-700 hover:bg-slate-100 relative"
+              onClick={() => setShowNotifications(!showNotifications)}
+            >
+              <Bell className={`h-5 w-5 ${unreadCount > 0 ? 'text-blue-600' : ''}`} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-semibold shadow-lg">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </Button>
+            
+            {/* Notifications Dropdown */}
+            {showNotifications && (
+              <div className="absolute right-0 top-12 w-80 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50">
+                  <h3 className="text-slate-800 font-semibold">Notifications</h3>
+                  {unreadCount > 0 && (
+                    <button 
+                      onClick={markAllAsRead}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="overflow-y-auto max-h-72">
+                {notifications.length > 0 ? (
+                  notifications.slice(0, 10).map((notif) => (
+                    <div 
+                      key={notif.id}
+                      onClick={() => markAsRead(notif.id)}
+                      className={`px-4 py-3 border-b border-slate-100 last:border-b-0 cursor-pointer hover:bg-slate-50 transition-colors ${!notif.read ? 'bg-blue-50/50' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-full ${notif.type === 'received' ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                          {notif.type === 'received' ? (
+                            <ArrowDownLeft className="h-4 w-4 text-emerald-600" />
+                          ) : (
+                            <ArrowUpRight className="h-4 w-4 text-red-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm ${!notif.read ? 'text-slate-800 font-medium' : 'text-slate-600'}`}>
+                            {notif.message}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1 truncate">
+                            {notif.type === 'received' ? 'From: ' : 'To: '}{notif.otherPartyUPI}
+                          </p>
+                          <p className="text-xs text-slate-400 mt-0.5">{formatTime(notif.createdAt)}</p>
+                        </div>
+                        {!notif.read && (
+                          <div className="h-2 w-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-8 text-center text-slate-400">
+                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No notifications yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          </div>
           {user ? (
-            <Avatar>
+            <Avatar className="h-9 w-9 ring-2 ring-white shadow-md">
               <AvatarImage src={user?.photoURL} alt="User" />
-              <AvatarFallback>{user?.displayName?.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-medium">
+                {user?.displayName?.charAt(0)}
+              </AvatarFallback>
             </Avatar>
           ) : (
-            <Button onClick={onSignIn} className="bg-blue-600 text-white">
+            <Button onClick={onSignIn} className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/25">
               Sign in
             </Button>
           )}

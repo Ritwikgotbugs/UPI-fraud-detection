@@ -20,8 +20,8 @@ export function AuthProvider({ children }) {
     try {
       const txRef = collection(db, "transactions");
       
-      // Fetch sent transactions
-      const sentQuery = query(txRef, where("senderUPI", "==", upiId));
+      // Fetch sent transactions (where user is sender AND transactionType is "sent")
+      const sentQuery = query(txRef, where("senderUPI", "==", upiId), where("transactionType", "==", "sent"));
       const sentSnapshot = await getDocs(sentQuery);
       const sentList = sentSnapshot.docs.map(d => ({
         id: d.id,
@@ -29,8 +29,8 @@ export function AuthProvider({ children }) {
         transactionType: "sent"
       }));
       
-      // Fetch received transactions
-      const receivedQuery = query(txRef, where("recipientUPI", "==", upiId));
+      // Fetch received transactions (where user is recipient AND transactionType is "received")
+      const receivedQuery = query(txRef, where("recipientUPI", "==", upiId), where("transactionType", "==", "received"));
       const receivedSnapshot = await getDocs(receivedQuery);
       const receivedList = receivedSnapshot.docs.map(d => ({
         id: d.id,

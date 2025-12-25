@@ -6,6 +6,8 @@ import Dashboard from './components/logic/Dashboard';
 import Homepage from './components/logic/homepage';
 import NotFound from './components/logic/NotFound';
 import Recent from './components/logic/Recent';
+import ReportFraud from './components/logic/ReportFraud';
+import Settings from './components/logic/Settings';
 import SignIn from './components/logic/SignIn';
 import { AuthProvider, useAuth } from './context/AuthContext';
 const RouteTitleUpdater = () => {
@@ -19,6 +21,7 @@ const RouteTitleUpdater = () => {
       '/transactions': 'Fraudulent.ai - Transactions',
       '/admin': 'Fraudulent.ai - Admin Dashboard',
       '/settings': 'Fraudulent.ai - Settings',
+      '/report-fraud': 'Fraudulent.ai - Report Fraud',
       '/help-support': 'Fraudulent.ai - Help & Support',
     };
 
@@ -57,9 +60,10 @@ const AppContent = () => {
         <Route path="/send-money" element={<Homepage />} />
         <Route path="/transactions" element={<Recent />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/report-fraud" element={<ReportFraud />} />
         <Route path="/statements" element={<Homepage />} />
         <Route path="/beneficiaries" element={<Homepage />} />
-        <Route path="/settings" element={<PredictForm />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/help-support" element={<Homepage />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/predict" element={<PredictForm />} />

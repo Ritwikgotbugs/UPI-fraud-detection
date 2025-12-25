@@ -8,9 +8,8 @@ import {
   LayoutDashboard,
   LogOut,
   Send,
+  Settings,
   Shield,
-  ShieldCheck,
-  Sparkles,
   Wallet,
   Zap
 } from 'lucide-react';
@@ -21,7 +20,7 @@ import { auth } from "./firebase";
 export default function SidebarContent() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { userData, user } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -34,12 +33,13 @@ export default function SidebarContent() {
   
   const mainNavItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", badge: null },
-    { icon: Send, label: "Send Money", path: "/send-money", badge: null },
-    { icon: History, label: "Activity", path: "/transactions", badge: "3" },
+    { icon: Send, label: "Pay", path: "/send-money", badge: null },
+    { icon: History, label: "Activity", path: "/transactions", badge: null },
   ];
 
   const toolsNavItems = [
-    { icon: Shield, label: "Admin Panel", path: "/admin", badge: "Pro" },
+    { icon: Settings, label: "Fraud Settings", path: "/settings", badge: null },
+    { icon: Shield, label: "Admin Panel", path: "/admin", badge: null },
     { icon: Help, label: "Help Center", path: "/help-support", badge: null },
   ];
 
@@ -60,26 +60,10 @@ export default function SidebarContent() {
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-0.5">
-              <span className="text-base font-bold text-slate-800">SafePay</span>
-              <span className="text-base font-bold text-blue-600">AI</span>
+              <span className="text-base font-bold text-slate-800">Fraudulent</span>
+              <span className="text-base font-bold text-blue-600">.ai</span>
             </div>
-            <span className="text-[9px] text-slate-400 font-medium tracking-wider uppercase">Fraud Protection</span>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Protection Status - Compact */}
-      <div className="flex-shrink-0 px-4 pb-3">
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-2.5 border border-emerald-100">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 bg-emerald-500 rounded-md flex items-center justify-center">
-              <ShieldCheck className="h-3 w-3 text-white" />
-            </div>
-            <span className="text-xs font-semibold text-emerald-700">AI Protection Active</span>
-            <div className="ml-auto flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              <Sparkles className="h-3 w-3 text-emerald-500" />
-            </div>
+            <span className="text-[9px] text-slate-400 font-medium tracking-wider uppercase">UPI fraud detection</span>
           </div>
         </div>
       </div>
@@ -184,9 +168,7 @@ export default function SidebarContent() {
                         "text-[10px] px-1.5 py-0 h-5 font-semibold",
                         isActive(item.path) 
                           ? "bg-white/20 text-white border-white/30" 
-                          : item.badge === "Pro" 
-                            ? "bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 border-amber-200"
-                            : "bg-blue-100 text-blue-600 border-blue-200"
+                          : "bg-blue-100 text-blue-600 border-blue-200"
                       )}
                     >
                       {item.badge}
@@ -202,15 +184,19 @@ export default function SidebarContent() {
       {/* User Profile & Logout - Fixed at bottom */}
       <div className="flex-shrink-0 p-3 border-t border-slate-100 bg-white">
         <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 mb-2">
-          <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-            {userProfile?.displayName?.charAt(0) || "U"}
+          <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
+            {userData?.photoURL ? (
+              <img src={userData.photoURL} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              userData?.name?.charAt(0) || user?.displayName?.charAt(0) || "U"
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-slate-800 truncate">
-              {userProfile?.displayName || "User"}
+              {userData?.name || user?.displayName || "User"}
             </p>
             <p className="text-[10px] text-slate-400 truncate">
-              {userProfile?.email || "user@email.com"}
+              {userData?.email || user?.email || "user@email.com"}
             </p>
           </div>
         </div>

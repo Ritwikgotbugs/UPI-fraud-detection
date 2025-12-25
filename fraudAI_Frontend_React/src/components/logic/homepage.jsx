@@ -1,12 +1,12 @@
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';
-import Header from "./Header";
 import SidebarContent from './SidebarContent';
 import { db } from "./firebase.js";
 
@@ -45,11 +44,11 @@ import { db } from "./firebase.js";
         }, [showPopup]);
 
         const remarkOptions = [
-            { value: "rent", label: "Rent" },
-            { value: "utilities", label: "Utilities" },
-            { value: "groceries", label: "Groceries" },
-            { value: "entertainment", label: "Entertainment" },
-            { value: "other", label: "Other" },
+            { value: "first_time", label: "First-time Recipient" },
+            { value: "recurring", label: "Recurring Payment" },
+            { value: "urgent", label: "Urgent/Emergency" },
+            { value: "high_value", label: "High-Value Transfer" },
+            { value: "unknown", label: "Unknown Contact" },
           ];
     
 
@@ -5287,8 +5286,8 @@ import { db } from "./firebase.js";
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">Fraudulent.ai</h1>
-                <p className="text-lg text-slate-500 mb-8 max-w-md">AI-powered UPI payments with real-time fraud detection</p>
+                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">SafePay AI</h1>
+                <p className="text-lg text-slate-500 mb-8 max-w-md">ML-powered UPI fraud detection platform with real-time risk analysis</p>
                 <Button
                   onClick={handleGoogleSignIn}
                   className="px-8 py-4 h-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300"
@@ -5304,14 +5303,14 @@ import { db } from "./firebase.js";
               </aside>
     
               <main className="flex-1 overflow-y-auto">
-                <Header user={user} onSignIn={handleGoogleSignIn} />
+                {/* <Header user={user} onSignIn={handleGoogleSignIn} /> */}
     
                 <div className="p-4 md:p-6 space-y-5">
                   {/* Page Title */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <h1 className="text-2xl font-bold text-slate-800">Send Money</h1>
-                      <p className="text-slate-500 text-sm mt-0.5">Transfer funds instantly with AI protection</p>
+                      <h1 className="text-2xl font-bold text-slate-800">Simulate Transaction</h1>
+                      <p className="text-slate-500 text-sm mt-0.5">Test fraud detection with ML-powered risk analysis</p>
                     </div>
                     
                   </div>
@@ -5541,11 +5540,11 @@ import { db } from "./firebase.js";
                               )}
                             </div>
 
-                            {/* Category Selection */}
+                            {/* Transaction Context */}
                             <div className="space-y-2">
                               <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
                                 <MessageSquare className="h-4 w-4 text-blue-500" />
-                                Category
+                                Transaction Context
                               </label>
                               <div className="grid grid-cols-5 gap-2">
                                 {remarkOptions.map((option) => (

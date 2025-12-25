@@ -33,8 +33,8 @@ const RecentTransactions = () => {
         
         const transactionsCollection = collection(db, "transactions");
         
-        // Query for sent transactions (where user is sender)
-        const sentQuery = query(transactionsCollection, where("senderUPI", "==", userData.upiId));
+        // Query for sent transactions (where user is sender AND type is sent)
+        const sentQuery = query(transactionsCollection, where("senderUPI", "==", userData.upiId), where("transactionType", "==", "sent"));
         const sentSnapshot = await getDocs(sentQuery);
         const sentTransactions = sentSnapshot.docs.map(d => ({ 
           id: d.id, 
@@ -43,8 +43,8 @@ const RecentTransactions = () => {
         }));
         console.log("📤 Sent transactions:", sentTransactions.length);
 
-        // Query for received transactions (where user is recipient)
-        const receivedQuery = query(transactionsCollection, where("recipientUPI", "==", userData.upiId));
+        // Query for received transactions (where user is recipient AND type is received)
+        const receivedQuery = query(transactionsCollection, where("recipientUPI", "==", userData.upiId), where("transactionType", "==", "received"));
         const receivedSnapshot = await getDocs(receivedQuery);
         const receivedTransactions = receivedSnapshot.docs.map(d => ({ 
           id: d.id, 
@@ -120,7 +120,7 @@ const RecentTransactions = () => {
 
       {/* Main Content */}
       <main className="flex-1">
-        <Header user={user} />
+        {/* <Header user={user} /> */}
 
         <div className="p-6 space-y-5">
           {/* Page Header */}

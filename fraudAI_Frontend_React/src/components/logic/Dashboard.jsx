@@ -8,6 +8,7 @@ import { deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { motion } from "framer-motion";
 import {
   Activity,
+  AlertTriangle,
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
@@ -17,26 +18,23 @@ import {
   Edit2,
   Eye,
   EyeOff,
-  Gift,
-  Plus,
-  QrCode,
-  Receipt,
+  FileWarning,
+  Gauge,
   RefreshCw,
   Send,
+  Settings,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
-  Target,
   Trash2,
-  Users,
-  X,
-  Zap
+  UserX,
+  X
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
-import Header from "./Header.jsx";
 import SidebarContent from "./SidebarContent";
-import { handleGoogleSignIn } from "./auth";
 import { db } from "./firebase.js";
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -56,11 +54,12 @@ const Dashboard = () => {
   const [upiId, setUpiId] = useState("");
   const [balance, setBalance] = useState(contextBalance);
   const [transactions, setTransactions] = useState(contextTransactions);
-  const [monthlySpending, setMonthlySpending] = useState([]);
+  const [riskTrendData, setRiskTrendData] = useState([]);
   const [totalSpending, setTotalSpending] = useState(contextTotalSpending);
   const [totalReceived, setTotalReceived] = useState(contextTotalReceived);
-  const [cashbackEarned, setCashbackEarned] = useState(0);
-  const [spendingByCategory, setSpendingByCategory] = useState([]);
+  const [accountRiskScore, setAccountRiskScore] = useState(0);
+  const [riskLevel, setRiskLevel] = useState('low');
+  const [riskDistribution, setRiskDistribution] = useState([]);
   const [isEditingUpi, setIsEditingUpi] = useState(false);
   const [newUpiId, setNewUpiId] = useState("");
   const [showBalance, setShowBalance] = useState(true);
@@ -72,8 +71,33 @@ const Dashboard = () => {
     setTransactions(contextTransactions);
     setTotalSpending(contextTotalSpending);
     setTotalReceived(contextTotalReceived);
-    setCashbackEarned(contextTotalSpending * 0.01);
-  }, [contextBalance, contextTransactions, contextTotalSpending, contextTotalReceived]);
+    
+    // Calculate account risk score from user's transactionDetails
+    if (userData?.transactionDetails) {
+      const params = userData.transactionDetails;
+      let score = 10; // Base score
+      
+      if (params.recipientBlacklistStatus) score += 30;
+      if (params.vpnProxyUsage) score += 15;
+      if (params.geoLocationFlags === 'high-risk') score += 20;
+      if (params.geoLocationFlags === 'unusual') score += 10;
+      if (params.highRiskTransactionTimes) score += 10;
+      if (params.fraudComplaintsCount > 0) score += params.fraudComplaintsCount * 5;
+      if (params.pastFraudulentBehavior > 0) score += params.pastFraudulentBehavior * 8;
+      if (params.deviceFingerprinting > 0.5) score += 10;
+      if (params.behavioralBiometrics > 0.5) score += 10;
+      if (params.locationInconsistentTransactions) score += 15;
+      if (params.merchantCategoryMismatch) score += 10;
+      if (params.userDailyLimitExceeded) score += 15;
+      if (params.recipientVerificationStatus === 'unverified') score += 15;
+      if (params.accountAge && params.accountAge < 30) score += 10;
+      if (params.socialTrustScore && params.socialTrustScore < 50) score += 15;
+      
+      const finalScore = Math.min(100, score);
+      setAccountRiskScore(finalScore);
+      setRiskLevel(finalScore >= 60 ? 'high' : finalScore >= 35 ? 'medium' : 'low');
+    }
+  }, [contextBalance, contextTransactions, contextTotalSpending, contextTotalReceived, userData?.transactionDetails]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -111,26 +135,35 @@ const Dashboard = () => {
   useEffect(() => {
     if (userData?.upiId) {
       setUpiId(userData.upiId);
-      const sentList = contextTransactions.filter(tx => tx.transactionType === 'sent');
       
-      const categoryMap = {};
-      sentList.forEach(tx => {
-        const category = tx.remarks ? tx.remarks.charAt(0).toUpperCase() + tx.remarks.slice(1).toLowerCase() : 'Other';
-        categoryMap[category] = (categoryMap[category] || 0) + (parseFloat(tx.amount) || 0);
-      });
-      const categoryData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
-      setSpendingByCategory(categoryData.length > 0 ? categoryData : [{ name: 'No Data', value: 0 }]);
+      // Calculate risk distribution (pie chart data)
+      const lowRisk = contextTransactions.filter(tx => tx.riskLevel === 'low' || !tx.riskLevel).length;
+      const mediumRisk = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
+      const highRisk = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
+      
+      setRiskDistribution([
+        { name: 'Safe', value: lowRisk, color: '#10b981' },
+        { name: 'Suspicious', value: mediumRisk, color: '#f59e0b' },
+        { name: 'Flagged', value: highRisk, color: '#ef4444' },
+      ].filter(item => item.value > 0));
 
-      const monthlyMap = {};
+      // Calculate risk trend over last 6 months
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      months.forEach(m => { monthlyMap[m] = 0; });
+      const monthlyRisk = {};
+      months.forEach(m => { monthlyRisk[m] = { safe: 0, suspicious: 0, flagged: 0 }; });
       
-      sentList.forEach(tx => {
+      contextTransactions.forEach(tx => {
         const timestamp = tx.createdAt || tx.timestamp;
         if (timestamp) {
           const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
           const monthName = months[date.getMonth()];
-          monthlyMap[monthName] += parseFloat(tx.amount) || 0;
+          if (tx.riskLevel === 'high') {
+            monthlyRisk[monthName].flagged += 1;
+          } else if (tx.riskLevel === 'medium') {
+            monthlyRisk[monthName].suspicious += 1;
+          } else {
+            monthlyRisk[monthName].safe += 1;
+          }
         }
       });
       
@@ -138,33 +171,27 @@ const Dashboard = () => {
       const last6Months = [];
       for (let i = 5; i >= 0; i--) {
         const monthIdx = (currentMonth - i + 12) % 12;
-        last6Months.push({ name: months[monthIdx], value: monthlyMap[months[monthIdx]] });
+        last6Months.push({ 
+          name: months[monthIdx], 
+          safe: monthlyRisk[months[monthIdx]].safe,
+          suspicious: monthlyRisk[months[monthIdx]].suspicious,
+          flagged: monthlyRisk[months[monthIdx]].flagged
+        });
       }
-      setMonthlySpending(last6Months);
+      setRiskTrendData(last6Months);
     }
   }, [userData?.upiId, contextTransactions]);
 
   const quickActions = [
-    { icon: Send, label: "Send", color: "from-blue-500 to-blue-600", path: "/send-money" },
-    { icon: QrCode, label: "Scan & Pay", color: "from-violet-500 to-purple-600", path: "/send-money" },
-    { icon: Receipt, label: "Bills", color: "from-emerald-500 to-green-600", path: "/send-money" },
-    { icon: Gift, label: "Rewards", color: "from-amber-500 to-orange-600", path: "/dashboard" },
+    { icon: Send, label: "Send Money", color: "from-blue-500 to-blue-600", path: "/send-money" },
+    { icon: FileWarning, label: "Report Fraud", color: "from-red-500 to-rose-600", path: "/report-fraud" },
+    { icon: Settings, label: "ML Settings", color: "from-violet-500 to-purple-600", path: "/settings" },
+    { icon: Shield, label: "View Reports", color: "from-emerald-500 to-green-600", path: "/admin" },
   ];
 
-  const frequentContacts = contextTransactions
-    .filter(tx => tx.transactionType === 'sent')
-    .reduce((acc, tx) => {
-      const existing = acc.find(c => c.upi === tx.recipientUPI);
-      if (existing) {
-        existing.count += 1;
-        existing.total += Number(tx.amount);
-      } else {
-        acc.push({ upi: tx.recipientUPI, count: 1, total: Number(tx.amount) });
-      }
-      return acc;
-    }, [])
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+  // Get high-risk transactions count
+  const highRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
+  const mediumRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
@@ -173,7 +200,7 @@ const Dashboard = () => {
       </aside>
       
       <div className="flex-1 overflow-y-auto">
-        <Header user={user} onSignIn={handleGoogleSignIn} />
+        {/* <Header user={user} onSignIn={handleGoogleSignIn} /> */}
         
         <div className="p-4 md:p-6 space-y-6">
           {/* Welcome Section with Balance Card */}
@@ -281,58 +308,73 @@ const Dashboard = () => {
               </CardContent>
             </Card>
 
-            {/* Security & Rewards Cards */}
+            {/* Security & Risk Cards */}
             <div className="space-y-4">
-              <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100">
+              <Card className={`border-0 shadow-lg ${
+                riskLevel === 'low' ? 'bg-gradient-to-br from-emerald-500 to-green-600' :
+                riskLevel === 'medium' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                'bg-gradient-to-br from-red-500 to-rose-600'
+              } text-white`}>
                 <CardContent className="p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-emerald-100 rounded-xl">
-                      <ShieldCheck className="h-6 w-6 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-emerald-600 font-medium">AI Protection</p>
-                      <p className="text-lg font-bold text-emerald-800">Active</p>
-                    </div>
-                  </div>
-                  <p className="text-xs text-emerald-600/70 mt-3">All transactions monitored by ML fraud detection</p>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100">
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-amber-100 rounded-xl">
-                        <Zap className="h-6 w-6 text-amber-600" />
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-white/20 rounded-xl">
+                        <Gauge className="h-6 w-6" />
                       </div>
                       <div>
-                        <p className="text-sm text-amber-600 font-medium">Cashback</p>
-                        <p className="text-lg font-bold text-amber-800">₹{cashbackEarned.toFixed(0)}</p>
+                        <p className="text-white/80 text-sm font-medium">Your Risk Score</p>
+                        <p className="text-3xl font-bold">{accountRiskScore}</p>
                       </div>
                     </div>
-                    <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100">1% back</Badge>
+                    <Badge className={`${
+                      riskLevel === 'low' ? 'bg-emerald-100 text-emerald-700' :
+                      riskLevel === 'medium' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    } border-0`}>
+                      {riskLevel.toUpperCase()}
+                    </Badge>
                   </div>
+                  <div className="w-full bg-white/20 rounded-full h-2 mb-2">
+                    <div 
+                      className="bg-white h-2 rounded-full transition-all"
+                      style={{ width: `${accountRiskScore}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-white/70">
+                    {riskLevel === 'low' ? 'Your profile appears trustworthy' :
+                     riskLevel === 'medium' ? 'Some risk factors detected' :
+                     'Multiple risk factors - review your settings'}
+                  </p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="mt-2 text-white hover:bg-white/20 p-0 h-auto"
+                    onClick={() => navigate('/settings')}
+                  >
+                    Configure ML Parameters <ArrowRight className="h-3 w-3 ml-1" />
+                  </Button>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-violet-50 to-purple-50 border-violet-100">
+              <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-0 text-white">
                 <CardContent className="p-5">
                   <div className="flex items-center gap-4 mb-3">
-                    <div className="p-3 bg-violet-100 rounded-xl">
-                      <Target className="h-6 w-6 text-violet-600" />
+                    <div className="p-3 bg-red-500/20 rounded-xl">
+                      <UserX className="h-6 w-6 text-red-400" />
                     </div>
                     <div>
-                      <p className="text-sm text-violet-600 font-medium">Monthly Goal</p>
-                      <p className="text-lg font-bold text-violet-800">₹10,000</p>
+                      <p className="text-slate-300 text-sm font-medium">Report Fraud</p>
+                      <p className="text-lg font-bold">File a Complaint</p>
                     </div>
                   </div>
-                  <div className="w-full bg-violet-100 rounded-full h-2">
-                    <div 
-                      className="bg-gradient-to-r from-violet-500 to-purple-500 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min((totalReceived / 10000) * 100, 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-violet-600/70 mt-2">{((totalReceived / 10000) * 100).toFixed(0)}% achieved</p>
+                  <p className="text-xs text-slate-400 mb-3">Report suspicious users or fraudulent transactions to help protect the community</p>
+                  <Button 
+                    className="w-full bg-red-500 hover:bg-red-600 text-white"
+                    onClick={() => navigate('/report-fraud')}
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Report Suspicious Activity
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -368,7 +410,7 @@ const Dashboard = () => {
 
           {/* Analytics & Transactions Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Spending Chart */}
+            {/* Risk Detection Trend Chart */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -378,56 +420,63 @@ const Dashboard = () => {
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold text-slate-800">Spending Overview</CardTitle>
-                    <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-                      {['week', 'month', 'year'].map((tf) => (
-                        <button
-                          key={tf}
-                          onClick={() => setSelectedTimeframe(tf)}
-                          className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                            selectedTimeframe === tf 
-                              ? 'bg-white text-slate-800 shadow-sm' 
-                              : 'text-slate-500 hover:text-slate-700'
-                          }`}
-                        >
-                          {tf.charAt(0).toUpperCase() + tf.slice(1)}
-                        </button>
-                      ))}
+                    <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                      <Shield className="h-5 w-5 text-blue-500" />
+                      Fraud Detection Trend
+                    </CardTitle>
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> Safe</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Suspicious</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> Flagged</span>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={monthlySpending.length > 0 ? monthlySpending : [{ name: 'No Data', value: 0 }]}>
+                    <AreaChart data={riskTrendData.length > 0 ? riskTrendData : [{ name: 'No Data', safe: 0, suspicious: 0, flagged: 0 }]}>
                       <defs>
-                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        <linearGradient id="colorSafe" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorSuspicious" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="colorFlagged" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `₹${value}`} />
+                      <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
                       <Tooltip
                         content={({ active, payload }) => {
                           if (active && payload && payload.length) {
                             return (
                               <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-lg">
-                                <p className="text-slate-500 text-xs mb-1">{payload[0].payload.name}</p>
-                                <p className="text-blue-600 font-semibold">₹{payload[0].value.toLocaleString('en-IN')}</p>
+                                <p className="text-slate-500 text-xs mb-2 font-medium">{payload[0].payload.name}</p>
+                                <div className="space-y-1">
+                                  <p className="text-emerald-600 text-sm">Safe: {payload[0].payload.safe}</p>
+                                  <p className="text-amber-600 text-sm">Suspicious: {payload[0].payload.suspicious}</p>
+                                  <p className="text-red-600 text-sm">Flagged: {payload[0].payload.flagged}</p>
+                                </div>
                               </div>
                             );
                           }
                           return null;
                         }}
                       />
-                      <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorValue)" />
+                      <Area type="monotone" dataKey="safe" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorSafe)" stackId="1" />
+                      <Area type="monotone" dataKey="suspicious" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorSuspicious)" stackId="1" />
+                      <Area type="monotone" dataKey="flagged" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorFlagged)" stackId="1" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
             </motion.div>
 
-            {/* Category Breakdown */}
+            {/* Risk Distribution */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -435,14 +484,25 @@ const Dashboard = () => {
             >
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg h-full">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold text-slate-800">By Category</CardTitle>
+                  <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-violet-500" />
+                    Risk Distribution
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie data={spendingByCategory} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
-                        {spendingByCategory.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Pie 
+                        data={riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]} 
+                        cx="50%" 
+                        cy="50%" 
+                        innerRadius={50} 
+                        outerRadius={70} 
+                        paddingAngle={5} 
+                        dataKey="value"
+                      >
+                        {(riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
                       <Tooltip
@@ -451,7 +511,7 @@ const Dashboard = () => {
                             return (
                               <div className="bg-white border border-slate-200 p-2 rounded-lg shadow-lg">
                                 <p className="text-slate-700 text-sm font-medium">{payload[0].name}</p>
-                                <p className="text-slate-500 text-xs">₹{payload[0].value.toLocaleString('en-IN')}</p>
+                                <p className="text-slate-500 text-xs">{payload[0].value} transactions</p>
                               </div>
                             );
                           }
@@ -461,12 +521,15 @@ const Dashboard = () => {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="flex flex-wrap gap-2 mt-2 justify-center">
-                    {spendingByCategory.slice(0, 4).map((cat, i) => (
-                      <Badge key={cat.name} variant="outline" className="text-xs" style={{ borderColor: COLORS[i], color: COLORS[i] }}>
-                        {cat.name}
+                    {riskDistribution.map((item) => (
+                      <Badge key={item.name} variant="outline" className="text-xs" style={{ borderColor: item.color, color: item.color }}>
+                        {item.name}: {item.value}
                       </Badge>
                     ))}
                   </div>
+                  {riskDistribution.length === 0 && (
+                    <p className="text-center text-slate-400 text-sm">No transaction data yet</p>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -474,7 +537,7 @@ const Dashboard = () => {
 
           {/* Frequent Contacts & Recent Transactions */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Frequent Contacts */}
+            {/* Recent High-Risk Transactions */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -483,42 +546,51 @@ const Dashboard = () => {
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold text-slate-800">People</CardTitle>
-                    <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600 -mr-2">
-                      <Plus className="h-4 w-4 mr-1" /> Add
+                    <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                      <ShieldAlert className="h-5 w-5 text-amber-500" />
+                      Fraud Alerts
+                    </CardTitle>
+                    <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600 -mr-2" onClick={() => navigate('/admin')}>
+                      View All
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {frequentContacts.length > 0 ? (
-                    frequentContacts.map((contact, i) => (
-                      <motion.button
-                        key={contact.upi}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 * i }}
-                        onClick={() => navigate('/send-money')}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group"
-                      >
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-sm">
-                            {contact.upi.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 text-left">
-                          <p className="text-sm font-medium text-slate-800 truncate">{contact.upi}</p>
-                          <p className="text-xs text-slate-500">{contact.count} transactions</p>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                      </motion.button>
-                    ))
+                  {transactions.filter(tx => tx.riskLevel === 'high' || tx.riskLevel === 'medium').length > 0 ? (
+                    transactions
+                      .filter(tx => tx.riskLevel === 'high' || tx.riskLevel === 'medium')
+                      .slice(0, 4)
+                      .map((tx, i) => (
+                        <motion.div
+                          key={tx.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 * i }}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border ${
+                            tx.riskLevel === 'high' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                          }`}
+                        >
+                          <div className={`p-2 rounded-lg ${tx.riskLevel === 'high' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                            <AlertTriangle className={`h-4 w-4 ${tx.riskLevel === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-medium text-slate-800 truncate">
+                              {tx.transactionType === 'received' ? tx.senderUPI : tx.recipientUPI}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              ₹{Number(tx.amount).toLocaleString('en-IN')} • {tx.riskLevel} risk
+                            </p>
+                          </div>
+                          <Badge className={`${tx.riskLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'} border-0`}>
+                            {tx.riskScore || '?'}%
+                          </Badge>
+                        </motion.div>
+                      ))
                   ) : (
                     <div className="text-center py-8">
-                      <Users className="h-10 w-10 mx-auto text-slate-300 mb-2" />
-                      <p className="text-sm text-slate-500">No frequent contacts yet</p>
-                      <Button variant="ghost" size="sm" className="text-blue-500 mt-2" onClick={() => navigate('/send-money')}>
-                        Send your first payment
-                      </Button>
+                      <ShieldCheck className="h-10 w-10 mx-auto text-emerald-400 mb-2" />
+                      <p className="text-sm font-medium text-emerald-600">All Clear!</p>
+                      <p className="text-xs text-slate-500 mt-1">No high-risk transactions detected</p>
                     </div>
                   )}
                 </CardContent>

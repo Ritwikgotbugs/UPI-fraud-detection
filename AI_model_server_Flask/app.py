@@ -12,20 +12,20 @@ from datetime import datetime
 import json
 import os
 
-# Import our fraud detection engine
+
 from fraud_detection_engine import fraud_engine, FraudDetectionEngine, FEATURE_NAMES
 
 app = Flask(__name__)
-# Enable CORS for all routes and all origins
+
 CORS(app)
 
-# Load the ML model and integrate with fraud engine
+
 ml_model = None
 try:
     model_path = "best_rf_model (1).pkl"
     with open(model_path, "rb") as file:
         ml_model = pickle.load(file)
-    # Integrate ML model with fraud engine
+    
     fraud_engine.set_ml_model(ml_model)
     print("✅ ML model loaded and integrated with fraud engine successfully")
     print(f"   Model type: {type(ml_model).__name__}")
@@ -36,7 +36,7 @@ except Exception as e:
     print("   Running in rule-based fallback mode")
 
 
-# ==================== Health Check ====================
+
 @app.route('/')
 def home():
     return jsonify({
@@ -65,7 +65,7 @@ def home():
     })
 
 
-# ==================== Core Transaction Analysis ====================
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze_transaction():
     """
@@ -77,7 +77,7 @@ def analyze_transaction():
         return jsonify({"error": "No data provided"}), 400
     
     try:
-        # Extract transaction details
+        
         transaction = {
             'senderUPI': data.get('senderUPI', ''),
             'recipientUPI': data.get('recipientUPI', ''),
@@ -86,11 +86,11 @@ def analyze_transaction():
             'timestamp': datetime.fromisoformat(data.get('timestamp').replace('Z', '+00:00')) if data.get('timestamp') else datetime.now()
         }
         
-        # Get device and location info
+        
         device_info = data.get('deviceInfo', {})
         location = data.get('location', {})
         
-        # Process transaction through fraud engine (uses ML model internally)
+        
         result = fraud_engine.process_transaction(
             transaction, 
             device_info, 
@@ -118,7 +118,7 @@ def get_risk_score():
             'timestamp': datetime.now()
         }
         
-        # Use predict_fraud which uses the ML model
+        
         result = fraud_engine.predict_fraud(
             transaction,
             data.get('deviceInfo', {}),
@@ -142,7 +142,7 @@ def get_risk_score():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== ML Model Direct Prediction ====================
+
 @app.route('/api/predict', methods=['POST'])
 def predict():
     """
@@ -154,15 +154,15 @@ def predict():
         return jsonify({"error": "No data provided"}), 400
     
     try:
-        # If features provided as a dictionary (named features from dataset)
+        
         if 'features' in data and isinstance(data['features'], dict):
             if ml_model is None:
                 return jsonify({"error": "ML model not available"}), 503
             
-            # Convert named features dict to the proper format for the model
+            
             raw_features = data['features']
             
-            # Build features dict matching the training data format
+            
             features = {
                 'transaction_amount': raw_features.get('amount', raw_features.get('transaction_amount', 0)),
                 'transaction_frequency': raw_features.get('transaction_frequency', 5),
@@ -186,7 +186,7 @@ def predict():
                 'recent_high_value_transaction_flags': raw_features.get('recent_high_value_transaction_flags', 0)
             }
             
-            # Prepare for model - same preprocessing as training
+            
             feature_array = fraud_engine.prepare_features_for_model(features)
             
             prediction = ml_model.predict(feature_array)
@@ -195,7 +195,7 @@ def predict():
             fraud_prob = probability[1] if probability else (0.9 if prediction[0] == 1 else 0.1)
             risk_score = fraud_prob * 100
             
-            # Generate risk factors based on actual feature values
+            
             factors = []
             if features['recipient_blacklist_status'] == 1:
                 factors.append('⛔ Recipient is on BLACKLIST')
@@ -245,7 +245,7 @@ def predict():
                 "expected_label": data.get('expected_label')
             })
         
-        # If raw features array provided, use directly
+        
         if 'features' in data and isinstance(data['features'], list):
             if ml_model is None:
                 return jsonify({"error": "ML model not available"}), 503
@@ -262,7 +262,7 @@ def predict():
                 "model_used": "random_forest"
             })
         
-        # Otherwise, extract features from transaction data
+        
         transaction = {
             'senderUPI': data.get('senderUPI', ''),
             'recipientUPI': data.get('recipientUPI', ''),
@@ -292,7 +292,7 @@ def predict():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Feature Extraction ====================
+
 @app.route('/api/extract-features', methods=['POST'])
 def extract_features():
     """
@@ -317,7 +317,7 @@ def extract_features():
             data.get('location', {})
         )
         
-        # Also get the preprocessed array for model
+        
         feature_array = fraud_engine.prepare_features_for_model(features)
         
         return jsonify({
@@ -331,7 +331,7 @@ def extract_features():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Behavioral Profile ====================
+
 @app.route('/api/user/profile/<user_id>', methods=['GET'])
 def get_user_profile(user_id):
     """Get user's behavioral profile and risk assessment"""
@@ -356,7 +356,7 @@ def update_user_profile(user_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Payee Trust ====================
+
 @app.route('/api/payee/trust/<payee_id>', methods=['GET'])
 def get_payee_trust(payee_id):
     """Get trust score for a payee"""
@@ -386,7 +386,7 @@ def report_payee():
         payee_id = data['payeeId']
         reporter_id = data.get('reporterId', 'anonymous')
         
-        # Update payee trust with fraud flag
+        
         fraud_engine.update_payee_trust(payee_id, reporter_id, 0, is_fraud=True)
         
         return jsonify({
@@ -398,7 +398,7 @@ def report_payee():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Failed Attempts ====================
+
 @app.route('/api/failed-attempt', methods=['POST'])
 def record_failed_attempt():
     """Record a failed authentication attempt"""
@@ -416,7 +416,7 @@ def record_failed_attempt():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Feedback Loop ====================
+
 @app.route('/api/feedback', methods=['POST'])
 def submit_feedback():
     """Submit feedback on a transaction (fraud/not fraud)"""
@@ -445,7 +445,7 @@ def get_feedback_stats():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Simulation & Replay ====================
+
 @app.route('/api/simulate', methods=['POST'])
 def simulate_transaction():
     """Simulate a transaction with different scenarios"""
@@ -499,7 +499,7 @@ def replay_transactions():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Admin Dashboard ====================
+
 @app.route('/api/admin/dashboard', methods=['GET'])
 def get_dashboard():
     """Get comprehensive admin dashboard insights"""
@@ -605,7 +605,7 @@ def get_transactions():
         if risk_level:
             transactions = [t for t in transactions if t.get('risk_level') == risk_level]
         
-        # Format for frontend
+        
         formatted = []
         for tx in transactions:
             formatted.append({
@@ -626,7 +626,7 @@ def get_transactions():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Custom Rules ====================
+
 @app.route('/api/rules', methods=['GET'])
 def get_rules():
     """Get all custom rules"""
@@ -677,7 +677,7 @@ def delete_rule(rule_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Post-Transaction Analysis ====================
+
 @app.route('/api/analyze/post/<transaction_id>', methods=['GET'])
 def post_transaction_analysis(transaction_id):
     """Perform post-transaction analysis"""
@@ -688,7 +688,7 @@ def post_transaction_analysis(transaction_id):
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Thresholds Configuration ====================
+
 @app.route('/api/config/thresholds', methods=['GET'])
 def get_thresholds():
     """Get current risk thresholds"""
@@ -738,12 +738,12 @@ def update_weights():
         return jsonify({"error": str(e)}), 500
 
 
-# ==================== Alerts ====================
+
 @app.route('/api/alerts', methods=['GET'])
 def get_alerts():
     """Get recent alerts"""
     try:
-        # Get recent high/medium risk transactions as alerts
+        
         alerts = []
         for tx in fraud_engine.transaction_history[-100:]:
             if tx.get('risk_level') in ['high', 'medium']:
@@ -757,13 +757,13 @@ def get_alerts():
                 )
                 alerts.append(alert)
         
-        return jsonify({'alerts': alerts[-20:]})  # Last 20 alerts
+        return jsonify({'alerts': alerts[-20:]})  
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
-    # Add some default rules
+    
     fraud_engine.add_custom_rule({
         'name': 'Block very high value transactions',
         'condition': {'field': 'amount', 'operator': '>', 'value': 100000},

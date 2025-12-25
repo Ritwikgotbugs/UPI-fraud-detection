@@ -9,7 +9,7 @@ import { motion } from "framer-motion"
 import { ArrowDownLeft, ArrowUpRight, Calendar, Filter, Receipt, Search, TrendingDown, TrendingUp, X } from 'lucide-react'
 import { useEffect, useState } from "react"
 import { useAuth } from '../../context/AuthContext'
-import Header from "./Header"
+import MobileNav from "./MobileNav"
 import SidebarContent from "./SidebarContent"
 import { db } from './firebase'
 
@@ -18,22 +18,20 @@ const RecentTransactions = () => {
   const [searchTerm, setSearchTerm] = useState("")
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState("all") // all, sent, received
+  const [filter, setFilter] = useState("all") 
 
   useEffect(() => {
     const fetchTransactions = async () => {
       if (!userData?.upiId) {
-        console.log("No UPI ID available");
         setLoading(false);
         return;
       }
 
       try {
-        console.log("📊 Fetching transactions for UPI:", userData.upiId);
         
         const transactionsCollection = collection(db, "transactions");
         
-        // Query for sent transactions (where user is sender AND type is sent)
+        
         const sentQuery = query(transactionsCollection, where("senderUPI", "==", userData.upiId), where("transactionType", "==", "sent"));
         const sentSnapshot = await getDocs(sentQuery);
         const sentTransactions = sentSnapshot.docs.map(d => ({ 
@@ -41,9 +39,8 @@ const RecentTransactions = () => {
           ...d.data(),
           transactionType: "sent"
         }));
-        console.log("📤 Sent transactions:", sentTransactions.length);
 
-        // Query for received transactions (where user is recipient AND type is received)
+        
         const receivedQuery = query(transactionsCollection, where("recipientUPI", "==", userData.upiId), where("transactionType", "==", "received"));
         const receivedSnapshot = await getDocs(receivedQuery);
         const receivedTransactions = receivedSnapshot.docs.map(d => ({ 
@@ -51,13 +48,11 @@ const RecentTransactions = () => {
           ...d.data(),
           transactionType: "received"
         }));
-        console.log("📥 Received transactions:", receivedTransactions.length);
 
-        // Combine and sort by date
+        
         const allTransactions = [...sentTransactions, ...receivedTransactions]
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         
-        console.log("✅ Total transactions for user:", allTransactions.length);
         setTransactions(allTransactions);
       } catch (error) {
         console.error("Error fetching transactions:", error);
@@ -70,7 +65,7 @@ const RecentTransactions = () => {
   }, [userData?.upiId]);
 
   const filteredTransactions = transactions.filter((transaction) => {
-    // Filter by type
+    
     if (filter === "sent" && transaction.transactionType !== "sent") return false;
     if (filter === "received" && transaction.transactionType !== "received") return false;
     
@@ -90,7 +85,7 @@ const RecentTransactions = () => {
     )
   })
 
-  // Calculate stats
+  
   const totalSent = transactions.filter(t => t.transactionType === 'sent').reduce((acc, t) => acc + (t.amount || 0), 0);
   const totalReceived = transactions.filter(t => t.transactionType === 'received').reduce((acc, t) => acc + (t.amount || 0), 0);
 
@@ -113,16 +108,17 @@ const RecentTransactions = () => {
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-      {/* Sidebar */}
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
         <SidebarContent />
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1">
-        {/* <Header user={user} /> */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Navigation */}
+        <MobileNav />
 
-        <div className="p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-8 md:pb-12 space-y-4 md:space-y-5">
           {/* Page Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>

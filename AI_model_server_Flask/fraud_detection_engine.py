@@ -11,7 +11,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Optional, Any
 import hashlib
 
-# Feature names matching the ML model's training data (exact order from CSV)
+
 FEATURE_NAMES = [
     'Transaction Amount',
     'Transaction Frequency',
@@ -35,7 +35,7 @@ FEATURE_NAMES = [
     'Recent High-Value Transaction Flags'
 ]
 
-# Categorical feature values (from training data)
+
 VERIFICATION_STATUS_VALUES = ['verified', 'recently_registered', 'suspicious']
 GEO_LOCATION_VALUES = ['normal', 'high-risk', 'unusual']
 
@@ -76,37 +76,37 @@ class FraudDetectionEngine:
     """
     
     def __init__(self):
-        # User and recipient profiles
+        
         self.user_profiles: Dict[str, UserProfile] = {}
         self.recipient_profiles: Dict[str, RecipientProfile] = {}
         
-        # Transaction history
+        
         self.transaction_history: List[dict] = []
         self.alerts: List[dict] = []
         
-        # ML Model (loaded externally)
+        
         self.ml_model = None
         
-        # Risk thresholds
+        
         self.thresholds = {
             'high_risk': 70,
             'medium_risk': 40,
             'low_risk': 20
         }
         
-        # Weights for hybrid scoring
+        
         self.weights = {
             'ml_prediction': 0.7,
             'rule_based': 0.3
         }
         
-        # Custom rules
+        
         self.custom_rules: List[dict] = []
         
-        # Feedback records
+        
         self.feedback_records: List[dict] = []
         
-        # Blacklist
+        
         self.blacklisted_recipients: set = set()
     
     def set_ml_model(self, model):
@@ -152,12 +152,12 @@ class FraudDetectionEngine:
         features = {}
         reasons = []
         
-        # ===== FEATURE 1: Transaction Amount =====
+        
         features['Transaction Amount'] = amount
         if amount > 5000:
             reasons.append(f"High transaction amount: ₹{amount:.2f}")
         
-        # ===== FEATURE 2: Transaction Frequency (transactions in last hour) =====
+        
         recent_txns = [t for t in user_profile.transactions 
                       if (timestamp - t.get('timestamp', timestamp)).total_seconds() < 3600]
         frequency = len(recent_txns)
@@ -165,32 +165,32 @@ class FraudDetectionEngine:
         if frequency >= 5:
             reasons.append(f"High frequency: {frequency} transactions in last hour")
         
-        # ===== FEATURE 3: Recipient Verification Status =====
+        
         verification_status = recipient_profile.verification_status
         features['Recipient Verification Status'] = verification_status
         if verification_status in ['recently_registered', 'suspicious']:
             reasons.append(f"Recipient status: {verification_status}")
         
-        # ===== FEATURE 4: Recipient Blacklist Status =====
+        
         is_blacklisted = 1 if (recipient_profile.is_blacklisted or recipient_id in self.blacklisted_recipients) else 0
         features['Recipient Blacklist Status'] = is_blacklisted
         if is_blacklisted:
             reasons.append("⚠️ Recipient is BLACKLISTED")
         
-        # ===== FEATURE 5: Device Fingerprinting (new device = 1) =====
+        
         device_fingerprint = self._get_device_fingerprint(device_info)
         is_new_device = 1 if device_fingerprint not in user_profile.known_devices else 0
         features['Device Fingerprinting'] = is_new_device
         if is_new_device and user_profile.total_transactions > 0:
             reasons.append("Transaction from new/unknown device")
         
-        # ===== FEATURE 6: VPN or Proxy Usage =====
+        
         vpn_detected = self._detect_vpn_proxy(device_info)
         features['VPN or Proxy Usage'] = vpn_detected
         if vpn_detected:
             reasons.append("VPN/Proxy detected - masked IP address")
         
-        # ===== FEATURE 7: Geo-Location Flags =====
+        
         geo_flag = self._get_geo_location_flag(location_info, user_profile)
         features['Geo-Location Flags'] = geo_flag
         if geo_flag == 'high-risk':
@@ -198,51 +198,51 @@ class FraudDetectionEngine:
         elif geo_flag == 'unusual':
             reasons.append("Unusual geographic location")
         
-        # ===== FEATURE 8: Behavioral Biometrics =====
+        
         behavioral_score = self._calculate_behavioral_score(user_profile, transaction)
         features['Behavioral Biometrics'] = round(behavioral_score, 4)
         if behavioral_score > 1.5:
             reasons.append(f"Unusual behavioral pattern (score: {behavioral_score:.2f})")
         
-        # ===== FEATURE 9: Time Since Last Transaction (hours) =====
+        
         if user_profile.last_transaction_time:
             time_since_last = (timestamp - user_profile.last_transaction_time).total_seconds() / 3600
         else:
             time_since_last = 24.0
         features['Time Since Last Transaction'] = round(time_since_last, 2)
         
-        # ===== FEATURE 10: Social Trust Score =====
+        
         trust_score = recipient_profile.trust_score
         features['Social Trust Score'] = trust_score
         if trust_score < 30:
             reasons.append(f"Low recipient trust score: {trust_score}")
         
-        # ===== FEATURE 11: Account Age (years) =====
+        
         account_age = (datetime.now() - user_profile.account_created).days / 365
         features['Account Age'] = round(account_age, 2)
         if account_age < 0.1:
             reasons.append("New account (less than 1 month old)")
         
-        # ===== FEATURE 12: High-Risk Transaction Times =====
+        
         hour = timestamp.hour
         is_high_risk_time = 1 if (hour >= 23 or hour < 5) else 0
         features['High-Risk Transaction Times'] = is_high_risk_time
         if is_high_risk_time:
             reasons.append(f"Transaction at high-risk time ({hour}:00)")
         
-        # ===== FEATURE 13: Past Fraudulent Behavior Flags =====
+        
         past_fraud_flags = user_profile.past_fraudulent_flags
         features['Past Fraudulent Behavior Flags'] = past_fraud_flags
         if past_fraud_flags > 0:
             reasons.append(f"User has {past_fraud_flags} past fraud flags")
         
-        # ===== FEATURE 14: Location-Inconsistent Transactions =====
+        
         location_inconsistent = self._check_location_inconsistency(user_profile, location_info, timestamp)
         features['Location-Inconsistent Transactions'] = location_inconsistent
         if location_inconsistent:
             reasons.append("Location inconsistency detected (impossible travel)")
         
-        # ===== FEATURE 15: Normalized Transaction Amount =====
+        
         if user_profile.avg_amount > 0:
             normalized_vs_avg = amount / user_profile.avg_amount
         else:
@@ -251,32 +251,32 @@ class FraudDetectionEngine:
         if normalized_vs_avg > 2:
             reasons.append(f"Amount is {normalized_vs_avg:.1f}x user's average")
         
-        # ===== FEATURE 16: Transaction Context Anomalies =====
+        
         context_anomaly = self._detect_context_anomaly(user_profile, transaction)
         features['Transaction Context Anomalies'] = round(context_anomaly, 4)
         if context_anomaly > 1.0:
             reasons.append("Transaction doesn't match typical spending pattern")
         
-        # ===== FEATURE 17: Fraud Complaints Count =====
+        
         complaints_count = recipient_profile.fraud_reports
         features['Fraud Complaints Count'] = complaints_count
         if complaints_count > 0:
             reasons.append(f"Recipient has {complaints_count} fraud complaints")
         
-        # ===== FEATURE 18: Merchant Category Mismatch =====
+        
         merchant_mismatch = self._check_merchant_mismatch(recipient_profile, amount)
         features['Merchant Category Mismatch'] = merchant_mismatch
         if merchant_mismatch:
             reasons.append("Transaction amount doesn't match merchant category")
         
-        # ===== FEATURE 19: User Daily Limit Exceeded =====
+        
         daily_total = self._get_daily_total(user_id, timestamp)
         limit_exceeded = 1 if (daily_total + amount) > user_profile.daily_limit else 0
         features['User Daily Limit Exceeded'] = limit_exceeded
         if limit_exceeded:
             reasons.append(f"Daily limit exceeded (₹{daily_total + amount:.0f}/₹{user_profile.daily_limit:.0f})")
         
-        # ===== FEATURE 20: Recent High-Value Transaction Flags =====
+        
         recent_high_value = self._check_recent_high_value(user_id, timestamp)
         features['Recent High-Value Transaction Flags'] = recent_high_value
         if recent_high_value:
@@ -289,7 +289,7 @@ class FraudDetectionEngine:
         Convert features dict to numpy array matching ML model's expected format
         Applies same preprocessing as training (normalization + one-hot encoding)
         """
-        # Normalize numerical features to match training preprocessing
+        
         amount_normalized = min(features['Transaction Amount'] / 5000, 1.0)
         frequency_normalized = min(features['Transaction Frequency'] / 10, 1.0)
         time_since_normalized = min(features['Time Since Last Transaction'] / 30, 1.0)
@@ -300,34 +300,34 @@ class FraudDetectionEngine:
         normalized_amount = min(features['Normalized Transaction Amount'] / 5, 1.0)
         context_anomaly_normalized = min(features['Transaction Context Anomalies'] / 3, 1.0)
         
-        # Build feature array (numerical features first)
+        
         feature_array = [
-            amount_normalized,                              # Transaction Amount
-            frequency_normalized,                           # Transaction Frequency
-            features['Recipient Blacklist Status'],         # Recipient Blacklist Status
-            features['Device Fingerprinting'],              # Device Fingerprinting
-            features['VPN or Proxy Usage'],                 # VPN or Proxy Usage
-            behavioral_normalized,                          # Behavioral Biometrics
-            time_since_normalized,                          # Time Since Last Transaction
-            trust_score_normalized,                         # Social Trust Score
-            account_age_normalized,                         # Account Age
-            features['High-Risk Transaction Times'],        # High-Risk Transaction Times
-            features['Past Fraudulent Behavior Flags'],     # Past Fraudulent Behavior Flags
-            features['Location-Inconsistent Transactions'], # Location-Inconsistent Transactions
-            normalized_amount,                              # Normalized Transaction Amount
-            context_anomaly_normalized,                     # Transaction Context Anomalies
-            complaints_normalized,                          # Fraud Complaints Count
-            features['Merchant Category Mismatch'],         # Merchant Category Mismatch
-            features['User Daily Limit Exceeded'],          # User Daily Limit Exceeded
-            features['Recent High-Value Transaction Flags'],# Recent High-Value Transaction Flags
+            amount_normalized,                              
+            frequency_normalized,                           
+            features['Recipient Blacklist Status'],         
+            features['Device Fingerprinting'],              
+            features['VPN or Proxy Usage'],                 
+            behavioral_normalized,                          
+            time_since_normalized,                          
+            trust_score_normalized,                         
+            account_age_normalized,                         
+            features['High-Risk Transaction Times'],        
+            features['Past Fraudulent Behavior Flags'],     
+            features['Location-Inconsistent Transactions'], 
+            normalized_amount,                              
+            context_anomaly_normalized,                     
+            complaints_normalized,                          
+            features['Merchant Category Mismatch'],         
+            features['User Daily Limit Exceeded'],          
+            features['Recent High-Value Transaction Flags'],
         ]
         
-        # One-hot encode Recipient Verification Status (drop_first=True removes 'verified')
+        
         verification_status = features['Recipient Verification Status']
         feature_array.append(1 if verification_status == 'recently_registered' else 0)
         feature_array.append(1 if verification_status == 'suspicious' else 0)
         
-        # One-hot encode Geo-Location Flags (drop_first=True removes 'normal')
+        
         geo_flag = features['Geo-Location Flags']
         feature_array.append(1 if geo_flag == 'high-risk' else 0)
         feature_array.append(1 if geo_flag == 'unusual' else 0)
@@ -388,7 +388,7 @@ class FraudDetectionEngine:
             
             if txn_location and current_city and txn_location.lower() != current_city.lower():
                 time_diff = abs((timestamp - txn_time).total_seconds()) / 3600
-                if time_diff < 2:  # Less than 2 hours between different cities
+                if time_diff < 2:  
                     return 1
         return 0
     
@@ -453,13 +453,13 @@ class FraudDetectionEngine:
         """
         Main prediction method using ML model for fraud detection
         """
-        # Extract all 20 features
+        
         features, reasons = self.extract_20_features(transaction, device_info, location_info)
         
-        # Prepare features for ML model
+        
         feature_array = self.prepare_features_for_model(features)
         
-        # Get ML prediction
+        
         ml_probability = 0.0
         model_used = 'rule_based'
         
@@ -473,10 +473,10 @@ class FraudDetectionEngine:
         else:
             ml_probability = self._rule_based_score(features)
         
-        # Calculate final risk score (0-100)
+        
         risk_score = ml_probability * 100
         
-        # Determine risk level and actions
+        
         if risk_score >= self.thresholds['high_risk']:
             risk_level = 'high'
             should_block = True
@@ -490,13 +490,13 @@ class FraudDetectionEngine:
             should_block = False
             requires_verification = False
         
-        # Apply custom rules
+        
         should_block, requires_verification, rule_reasons = self._apply_custom_rules(
             features, should_block, requires_verification
         )
         reasons.extend(rule_reasons)
         
-        # Generate recommendations
+        
         recommendations = self._generate_recommendations(risk_level, reasons)
         
         return {
@@ -516,7 +516,7 @@ class FraudDetectionEngine:
         """Fallback rule-based scoring"""
         score = 0.0
         
-        # High impact
+        
         if features.get('Recipient Blacklist Status', 0) == 1:
             score += 0.4
         if features.get('Past Fraudulent Behavior Flags', 0) > 0:
@@ -524,7 +524,7 @@ class FraudDetectionEngine:
         if features.get('VPN or Proxy Usage', 0) == 1:
             score += 0.15
         
-        # Medium impact
+        
         if features.get('Geo-Location Flags') == 'high-risk':
             score += 0.2
         if features.get('Location-Inconsistent Transactions', 0) == 1:
@@ -534,7 +534,7 @@ class FraudDetectionEngine:
         if features.get('High-Risk Transaction Times', 0) == 1:
             score += 0.1
         
-        # Low impact
+        
         if features.get('User Daily Limit Exceeded', 0) == 1:
             score += 0.08
         if features.get('Recent High-Value Transaction Flags', 0) == 1:
@@ -544,7 +544,7 @@ class FraudDetectionEngine:
         if features.get('Social Trust Score', 100) < 30:
             score += 0.08
         
-        # Verification status
+        
         status = features.get('Recipient Verification Status', 'verified')
         if status == 'suspicious':
             score += 0.12
@@ -633,12 +633,12 @@ class FraudDetectionEngine:
         """Process a transaction - predict fraud and update profiles"""
         result = self.predict_fraud(transaction, device_info, location_info)
         
-        # Generate transaction ID
+        
         tx_id = hashlib.md5(
             f"{transaction.get('senderUPI')}{transaction.get('recipientUPI')}{datetime.now().isoformat()}".encode()
         ).hexdigest()[:12]
         
-        # Update profiles
+        
         user_id = transaction.get('senderUPI', '')
         recipient_id = transaction.get('recipientUPI', '')
         amount = float(transaction.get('amount', 0))
@@ -653,7 +653,7 @@ class FraudDetectionEngine:
         user_profile = self.get_or_create_user_profile(user_id)
         recipient_profile = self.get_or_create_recipient_profile(recipient_id)
         
-        # Update user profile
+        
         user_profile.transactions.append({
             'amount': amount,
             'timestamp': timestamp,
@@ -663,24 +663,24 @@ class FraudDetectionEngine:
         user_profile.total_transactions += 1
         user_profile.last_transaction_time = timestamp
         
-        # Update running average
+        
         if user_profile.avg_amount == 0:
             user_profile.avg_amount = amount
         else:
             user_profile.avg_amount = (user_profile.avg_amount * 0.9) + (amount * 0.1)
         
-        # Update known devices/locations
+        
         if device_info:
             fp = self._get_device_fingerprint(device_info)
             user_profile.known_devices.add(fp)
         if location_info and location_info.get('city'):
             user_profile.known_locations.add(location_info.get('city'))
         
-        # Update recipient profile
+        
         recipient_profile.transaction_count += 1
         recipient_profile.unique_senders.add(user_id)
         
-        # Store transaction
+        
         tx_record = {
             'id': tx_id,
             'senderUPI': user_id,
@@ -695,7 +695,7 @@ class FraudDetectionEngine:
         }
         self.transaction_history.append(tx_record)
         
-        # Generate alert if needed
+        
         alert = None
         if result['risk_level'] in ['high', 'medium']:
             alert = {
@@ -726,7 +726,7 @@ class FraudDetectionEngine:
         """Wrapper for backward compatibility"""
         return self.predict_fraud(transaction, device_info, location)
     
-    # ==================== Admin Dashboard Methods ====================
+    
     
     def get_dashboard_insights(self) -> dict:
         """Get comprehensive dashboard insights"""
@@ -734,7 +734,7 @@ class FraudDetectionEngine:
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = today - timedelta(days=7)
         
-        # Ensure valid timestamps
+        
         for t in self.transaction_history:
             if isinstance(t.get('timestamp'), str):
                 try:
@@ -833,7 +833,7 @@ class FraudDetectionEngine:
         if not recent:
             return patterns
         
-        # Burst pattern
+        
         burst_count = sum(1 for t in recent if 'frequency' in str(t.get('factors', [])).lower())
         if burst_count > 5:
             patterns.append({
@@ -843,7 +843,7 @@ class FraudDetectionEngine:
                 'count': burst_count
             })
         
-        # New device
+        
         new_device_count = sum(1 for t in recent if 'device' in str(t.get('factors', [])).lower())
         if new_device_count > 3:
             patterns.append({
@@ -853,7 +853,7 @@ class FraudDetectionEngine:
                 'count': new_device_count
             })
         
-        # Late night
+        
         late_night = sum(1 for t in recent if 'high-risk time' in str(t.get('factors', [])).lower())
         if late_night > 5:
             patterns.append({
@@ -863,7 +863,7 @@ class FraudDetectionEngine:
                 'count': late_night
             })
         
-        # VPN usage
+        
         vpn_count = sum(1 for t in recent if 'vpn' in str(t.get('factors', [])).lower())
         if vpn_count > 2:
             patterns.append({
@@ -930,7 +930,7 @@ class FraudDetectionEngine:
             
             return sorted(result, key=lambda x: x['importance'], reverse=True)
         
-        # Default importance based on rule weights
+        
         return [
             {'feature': 'Recipient Blacklist Status', 'importance': 18.5},
             {'feature': 'Past Fraudulent Behavior', 'importance': 15.2},
@@ -956,7 +956,7 @@ class FraudDetectionEngine:
             'feedback_rate': round(total / max(len(self.transaction_history), 1) * 100, 2)
         }
     
-    # ==================== Rules Management ====================
+    
     
     def add_custom_rule(self, rule: dict) -> dict:
         """Add a custom rule"""
@@ -982,7 +982,7 @@ class FraudDetectionEngine:
         """Delete a rule"""
         self.custom_rules = [r for r in self.custom_rules if r.get('id') != rule_id]
     
-    # ==================== Feedback ====================
+    
     
     def record_feedback(self, transaction_id: str, is_fraud: bool, reported_by: str = 'user') -> dict:
         """Record feedback"""
@@ -994,7 +994,7 @@ class FraudDetectionEngine:
         }
         self.feedback_records.append(feedback)
         
-        # Update profiles based on feedback
+        
         for tx in self.transaction_history:
             if tx.get('id') == transaction_id:
                 if is_fraud:
@@ -1016,7 +1016,7 @@ class FraudDetectionEngine:
         """Get feedback stats"""
         return self._get_feedback_stats()
     
-    # ==================== Simulation ====================
+    
     
     def simulate_transaction(self, transaction: dict, scenario: str = 'normal') -> dict:
         """Simulate transaction scenarios"""
@@ -1081,7 +1081,7 @@ class FraudDetectionEngine:
             results.append(result)
         return results
     
-    # ==================== Blacklist ====================
+    
     
     def blacklist_recipient(self, recipient_id: str, reason: str = '') -> dict:
         """Add to blacklist"""
@@ -1110,7 +1110,7 @@ class FraudDetectionEngine:
             'timestamp': datetime.now().isoformat()
         }
     
-    # ==================== User Risk Profile ====================
+    
     
     def get_user_risk_profile(self, user_id: str) -> dict:
         """Get user risk profile"""
@@ -1124,7 +1124,7 @@ class FraudDetectionEngine:
                 'total_transactions': 0
             }
         
-        # Calculate user's average risk
+        
         user_txns = [t for t in self.transaction_history if t.get('senderUPI') == user_id]
         avg_risk = np.mean([t.get('risk_score', 0) for t in user_txns]) if user_txns else 0
         
@@ -1141,7 +1141,7 @@ class FraudDetectionEngine:
             'account_age_days': (datetime.now() - profile.account_created).days
         }
     
-    # ==================== Alerts ====================
+    
     
     def generate_alert(self, risk_result: dict, transaction: dict) -> dict:
         """Generate alert from risk result"""
@@ -1175,5 +1175,5 @@ class FraudDetectionEngine:
         return {'error': 'Transaction not found'}
 
 
-# Create global instance
+
 fraud_engine = FraudDetectionEngine()

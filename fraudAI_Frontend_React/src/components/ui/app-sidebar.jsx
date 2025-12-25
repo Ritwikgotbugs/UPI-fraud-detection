@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Calendar, Home, Inbox, Search, Settings } from "lucide-react";
 
-// Menu items.
 const items = [
   {
     title: "Home",

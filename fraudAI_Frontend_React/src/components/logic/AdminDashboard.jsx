@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { motion } from "framer-motion";
 import {
@@ -32,14 +33,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import Header from "./Header.jsx";
+import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 
 const API_BASE = 'https://rxcq.pythonanywhere.com';
 
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
 
-// Fallback sample data when API is offline
+
 const SAMPLE_DASHBOARD_DATA = {
   summary: {
     total_transactions_today: 47,
@@ -88,8 +89,8 @@ const SAMPLE_SCENARIOS = [
   { id: 'blacklisted_recipient', name: 'Blacklisted Recipient', description: 'Payment to blacklisted payee' }
 ];
 
-// Example test cases from actual training dataset (fraud_dataset_Generator_using_numpy.csv)
-// These represent real patterns the ML model was trained on
+
+
 const DATASET_EXAMPLES = {
   fraud: [
     {
@@ -333,7 +334,7 @@ const AdminDashboard = () => {
   const [simulationResult, setSimulationResult] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenario, setSelectedScenario] = useState('normal');
-  // Full 20-parameter simulation state
+  
   const [simulationParams, setSimulationParams] = useState({
     senderUPI: 'test@upi',
     recipientUPI: 'receiver@upi',
@@ -360,7 +361,7 @@ const AdminDashboard = () => {
   });
   const [datasetTestResult, setDatasetTestResult] = useState(null);
 
-  // New rule form
+  
   const [newRule, setNewRule] = useState({
     name: '',
     field: 'amount',
@@ -369,7 +370,12 @@ const AdminDashboard = () => {
     action: 'flag',
     risk_modifier: 20
   });
-  const [modelInfo, setModelInfo] = useState(null);
+  const [modelInfo, setModelInfo] = useState({
+    status: 'unknown',
+    type: 'Random Forest',
+    features_count: 20,
+    training_method: 'GAN-augmented'
+  });
   const [featureImportance, setFeatureImportance] = useState([]);
 
   const fetchDashboardData = async () => {
@@ -387,11 +393,11 @@ const AdminDashboard = () => {
 
       const [dashboardRes, rulesRes, alertsRes, thresholdsRes, weightsRes, scenariosRes, modelInfoRes, featureImportanceRes] = await Promise.all(requests);
 
-      // Check if at least one request succeeded
+      
       const anySuccess = dashboardRes?.ok || rulesRes?.ok || alertsRes?.ok || thresholdsRes?.ok || weightsRes?.ok || scenariosRes?.ok;
       setApiError(!anySuccess);
 
-      // Use API data if available, otherwise use sample data
+      
       if (dashboardRes?.ok) {
         setDashboardData(await dashboardRes.json());
       } else {
@@ -454,6 +460,29 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       setApiError(true);
+      
+      setDashboardData(SAMPLE_DASHBOARD_DATA);
+      setRules([
+        { id: 1, name: 'Block very high value', condition: { field: 'amount', operator: '>', value: 100000 }, action: 'block', enabled: true },
+        { id: 2, name: 'Flag late night high value', condition: { field: 'amount', operator: '>', value: 10000 }, action: 'flag', enabled: true }
+      ]);
+      setWeights({
+        behavioral_deviation: 0.20,
+        velocity_risk: 0.15,
+        device_risk: 0.10,
+        payee_trust: 0.15,
+        time_context: 0.10,
+        geo_risk: 0.10,
+        failed_attempts: 0.10,
+        ml_score: 0.10
+      });
+      setScenarios(SAMPLE_SCENARIOS);
+      setModelInfo({
+        status: 'unknown',
+        type: 'Random Forest',
+        features_count: 20,
+        training_method: 'GAN-augmented'
+      });
     } finally {
       setLoading(false);
     }
@@ -461,7 +490,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    // Refresh every 30 seconds
+    
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -491,12 +520,12 @@ const AdminDashboard = () => {
       if (res.ok) {
         await fetchDashboardData();
       } else {
-        // Add locally if API fails
+        
         setRules(prev => [...prev, { ...ruleData, id: Date.now() }]);
       }
     } catch (error) {
       console.error('Error adding rule:', error);
-      // Add locally if API fails
+      
       setRules(prev => [...prev, { ...ruleData, id: Date.now() }]);
     }
     setNewRule({ name: '', field: 'amount', operator: '>', value: '', action: 'flag', risk_modifier: 20 });
@@ -508,7 +537,7 @@ const AdminDashboard = () => {
       await fetchDashboardData();
     } catch (error) {
       console.error('Error deleting rule:', error);
-      // Remove locally if API fails
+      
       setRules(prev => prev.filter(r => r.id !== ruleId));
     }
   };
@@ -527,7 +556,7 @@ const AdminDashboard = () => {
 
   const [isSimulating, setIsSimulating] = useState(false);
   
-  // Full 20-parameter simulation using /api/predict
+  
   const handleSimulation = async () => {
     setIsSimulating(true);
     setDatasetTestResult(null);
@@ -568,22 +597,22 @@ const AdminDashboard = () => {
           feature_breakdown: simulationParams
         });
       } else {
-        // Generate offline simulation result
+        
         setSimulationResult(generateOfflineSimulation());
       }
     } catch (error) {
       console.error('Error running simulation:', error);
-      // Generate offline simulation result
+      
       setSimulationResult(generateOfflineSimulation());
     } finally {
       setIsSimulating(false);
     }
   };
 
-  // Generate simulation result when API is offline - uses all 20 parameters
+  
   const generateOfflineSimulation = () => {
-    // Calculate risk based on actual parameter values
-    let riskScore = 10; // base
+    
+    let riskScore = 10; 
     const factors = [];
     
     if (simulationParams.recipient_blacklist_status === 1) { riskScore += 35; factors.push('⛔ Recipient is BLACKLISTED'); }
@@ -622,7 +651,7 @@ const AdminDashboard = () => {
     };
   };
 
-  // Load example into simulation params
+  
   const loadExampleToSimulator = (example) => {
     setSimulationParams({
       ...simulationParams,
@@ -649,13 +678,13 @@ const AdminDashboard = () => {
     });
   };
 
-  // Handler for testing dataset examples with the ML model
+  
   const handleDatasetExample = async (example) => {
     setIsSimulating(true);
     setDatasetTestResult(example);
     
     try {
-      // Send the raw 20 features to the predict endpoint
+      
       const res = await fetch(`${API_BASE}/api/predict`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -672,12 +701,12 @@ const AdminDashboard = () => {
           feature_breakdown: example.params
         });
       } else {
-        // Generate offline result based on dataset example
+        
         const isFraud = example.expectedLabel === 'FRAUD';
         const fraudProb = isFraud ? 0.75 + Math.random() * 0.2 : 0.15 + Math.random() * 0.2;
         const riskScore = fraudProb * 100;
         
-        // Generate factors based on the actual feature values
+        
         const factors = [];
         if (example.params.recipient_blacklist_status === 1) factors.push('Recipient is BLACKLISTED');
         if (example.params.vpn_proxy_usage === 1) factors.push('VPN/Proxy usage detected');
@@ -707,7 +736,7 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Error testing dataset example:', error);
-      // Same offline handling as above
+      
       const isFraud = example.expectedLabel === 'FRAUD';
       const fraudProb = isFraud ? 0.75 + Math.random() * 0.2 : 0.15 + Math.random() * 0.2;
       const riskScore = fraudProb * 100;
@@ -757,7 +786,7 @@ const AdminDashboard = () => {
     }
   };
 
-  // Prepare chart data
+  
   const trustDistribution = dashboardData?.payee_trust_distribution 
     ? Object.entries(dashboardData.payee_trust_distribution).map(([name, value]) => ({ name, value }))
     : [];
@@ -770,34 +799,27 @@ const AdminDashboard = () => {
 
   const trendsData = dashboardData?.trends
     ? Object.entries(dashboardData.trends).map(([date, data]) => ({
-        date: date.slice(5), // MM-DD
+        date: date.slice(5), 
         transactions: data.count,
         highRisk: data.high_risk,
-        amount: data.amount / 1000 // In thousands
+        amount: data.amount / 1000 
       }))
     : [];
 
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-        <div className="text-center">
-          <RefreshCw className="h-12 w-12 animate-spin text-blue-500 mx-auto mb-4" />
-          <p className="text-slate-500">Loading Admin Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+      {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
         <SidebarContent />
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* <Header /> */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Navigation */}
+        <MobileNav />
 
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {/* API Error Banner */}
           {apiError && (
             <Alert className="mb-4 bg-amber-50 border-amber-200 text-amber-800">
@@ -809,36 +831,38 @@ const AdminDashboard = () => {
           )}
 
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
+              <h1 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-3">
                 <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg">
-                  <Brain className="h-6 w-6 text-white" />
+                  <Brain className="h-5 w-5 md:h-6 md:w-6 text-white" />
                 </div>
-                Fraud Detection Admin
+                <span className="hidden sm:inline">Fraud Detection Admin</span>
+                <span className="sm:hidden">Admin Panel</span>
               </h1>
-              <p className="text-slate-500 mt-1 ml-12">Monitor and configure fraud detection system</p>
+              <p className="text-slate-500 mt-1 ml-12 text-sm hidden sm:block">Monitor and configure fraud detection system</p>
             </div>
-            <Button onClick={fetchDashboardData} variant="outline" className="gap-2 border-slate-200 text-slate-600 hover:bg-slate-50">
+            <Button onClick={fetchDashboardData} variant="outline" className="gap-2 border-slate-200 text-slate-600 hover:bg-slate-50 w-full sm:w-auto">
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-2 mb-6 flex-wrap">
+          <div className="flex gap-2 mb-6 flex-wrap overflow-x-auto pb-2">
             {['overview', 'rules', 'simulation', 'alerts', 'settings'].map((tab) => (
               <Button
                 key={tab}
                 variant={activeTab === tab ? 'default' : 'outline'}
                 onClick={() => setActiveTab(tab)}
-                className={`capitalize ${activeTab === tab 
+                size="sm"
+                className={`capitalize whitespace-nowrap ${activeTab === tab 
                   ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25' 
                   : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
               >
-                {tab === 'overview' && <BarChart3 className="h-4 w-4 mr-2" />}
-                {tab === 'rules' && <GitBranch className="h-4 w-4 mr-2" />}
-                {tab === 'simulation' && <Play className="h-4 w-4 mr-2" />}
-                {tab === 'alerts' && <AlertTriangle className="h-4 w-4 mr-2" />}
+                {tab === 'overview' && <BarChart3 className="h-4 w-4 mr-1 md:mr-2" />}
+                {tab === 'rules' && <GitBranch className="h-4 w-4 mr-1 md:mr-2" />}
+                {tab === 'simulation' && <Play className="h-4 w-4 mr-1 md:mr-2" />}
+                {tab === 'alerts' && <AlertTriangle className="h-4 w-4 mr-1 md:mr-2" />}
                 {tab === 'settings' && <Settings className="h-4 w-4 mr-2" />}
                 {tab}
               </Button>
@@ -857,10 +881,19 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-slate-800">{dashboardData?.summary?.total_transactions_today || 0}</p>
-                    <p className="text-sm text-slate-400">
-                      ₹{((dashboardData?.summary?.total_amount_today || 0) / 1000).toFixed(1)}K total
-                    </p>
+                    {loading ? (
+                      <>
+                        <Skeleton className="h-9 w-16 mb-1" />
+                        <Skeleton className="h-4 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold text-slate-800">{dashboardData?.summary?.total_transactions_today || 0}</p>
+                        <p className="text-sm text-slate-400">
+                          ₹{((dashboardData?.summary?.total_amount_today || 0) / 1000).toFixed(1)}K total
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -871,10 +904,19 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-red-500">{dashboardData?.summary?.high_risk_today || 0}</p>
-                    <p className="text-sm text-slate-400">
-                      {dashboardData?.summary?.blocked_today || 0} blocked
-                    </p>
+                    {loading ? (
+                      <>
+                        <Skeleton className="h-9 w-12 mb-1" />
+                        <Skeleton className="h-4 w-20" />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold text-red-500">{dashboardData?.summary?.high_risk_today || 0}</p>
+                        <p className="text-sm text-slate-400">
+                          {dashboardData?.summary?.blocked_today || 0} blocked
+                        </p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -885,8 +927,17 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-amber-500">{dashboardData?.summary?.medium_risk_today || 0}</p>
-                    <p className="text-sm text-slate-400">Require review</p>
+                    {loading ? (
+                      <>
+                        <Skeleton className="h-9 w-12 mb-1" />
+                        <Skeleton className="h-4 w-24" />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold text-amber-500">{dashboardData?.summary?.medium_risk_today || 0}</p>
+                        <p className="text-sm text-slate-400">Require review</p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -897,8 +948,17 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-3xl font-bold text-emerald-500">{dashboardData?.summary?.total_transactions_week || 0}</p>
-                    <p className="text-sm text-slate-400">Last 7 days</p>
+                    {loading ? (
+                      <>
+                        <Skeleton className="h-9 w-16 mb-1" />
+                        <Skeleton className="h-4 w-20" />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold text-emerald-500">{dashboardData?.summary?.total_transactions_week || 0}</p>
+                        <p className="text-sm text-slate-400">Last 7 days</p>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -913,18 +973,33 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <AreaChart data={trendsData}>
-                        <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
-                        <YAxis stroke="#94a3b8" fontSize={12} />
-                        <Tooltip
-                          contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
-                          labelStyle={{ color: '#475569' }}
-                        />
-                        <Area type="monotone" dataKey="transactions" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} name="Transactions" />
-                        <Area type="monotone" dataKey="highRisk" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} name="High Risk" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    {loading ? (
+                      <div className="h-[250px] flex flex-col justify-end gap-2">
+                        <div className="flex items-end gap-2 h-full">
+                          {[60, 80, 45, 90, 70, 85, 55].map((h, i) => (
+                            <Skeleton key={i} className="flex-1" style={{ height: `${h}%` }} />
+                          ))}
+                        </div>
+                        <div className="flex justify-between">
+                          {[1, 2, 3, 4, 5, 6, 7].map((_, i) => (
+                            <Skeleton key={i} className="h-3 w-8" />
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <AreaChart data={trendsData}>
+                          <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+                          <YAxis stroke="#94a3b8" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                            labelStyle={{ color: '#475569' }}
+                          />
+                          <Area type="monotone" dataKey="transactions" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.2} name="Transactions" />
+                          <Area type="monotone" dataKey="highRisk" stroke="#ef4444" fill="#ef4444" fillOpacity={0.2} name="High Risk" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -936,25 +1011,31 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ResponsiveContainer width="100%" height={250}>
-                      <PieChart>
-                        <Pie
-                          data={trustDistribution}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {trustDistribution.map((_, index) => (
-                            <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                        <Legend formatter={(value) => <span className="text-slate-600">{value}</span>} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {loading ? (
+                      <div className="h-[250px] flex items-center justify-center">
+                        <Skeleton className="h-40 w-40 rounded-full" />
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={250}>
+                        <PieChart>
+                          <Pie
+                            data={trustDistribution}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                          >
+                            {trustDistribution.map((_, index) => (
+                              <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
+                          <Legend formatter={(value) => <span className="text-slate-600">{value}</span>} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -967,14 +1048,29 @@ const AdminDashboard = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={hourlyData}>
-                      <XAxis dataKey="hour" stroke="#94a3b8" fontSize={10} />
-                      <YAxis stroke="#94a3b8" fontSize={12} />
-                      <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
-                      <Bar dataKey="avgRisk" fill="#8b5cf6" name="Avg Risk %" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {loading ? (
+                    <div className="h-[200px] flex flex-col justify-end gap-2">
+                      <div className="flex items-end gap-1 h-full">
+                        {Array.from({ length: 24 }, (_, i) => (
+                          <Skeleton key={i} className="flex-1" style={{ height: `${Math.random() * 60 + 20}%` }} />
+                        ))}
+                      </div>
+                      <div className="flex justify-between">
+                        {[0, 6, 12, 18, 23].map((h) => (
+                          <Skeleton key={h} className="h-3 w-6" />
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={hourlyData}>
+                        <XAxis dataKey="hour" stroke="#94a3b8" fontSize={10} />
+                        <YAxis stroke="#94a3b8" fontSize={12} />
+                        <Tooltip contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }} />
+                        <Bar dataKey="avgRisk" fill="#8b5cf6" name="Avg Risk %" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </CardContent>
               </Card>
 
@@ -988,7 +1084,16 @@ const AdminDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[200px]">
-                      {dashboardData?.top_risky_users?.length > 0 ? (
+                      {loading ? (
+                        <div className="space-y-2">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
+                              <Skeleton className="h-4 w-32" />
+                              <Skeleton className="h-5 w-12 rounded-full" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : dashboardData?.top_risky_users?.length > 0 ? (
                         <div className="space-y-2">
                           {dashboardData.top_risky_users.map((user, idx) => (
                             <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
@@ -1014,7 +1119,16 @@ const AdminDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <ScrollArea className="h-[200px]">
-                      {dashboardData?.new_fraud_patterns?.length > 0 ? (
+                      {loading ? (
+                        <div className="space-y-2">
+                          {[1, 2].map((i) => (
+                            <div key={i} className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                              <Skeleton className="h-4 w-32 mb-2" />
+                              <Skeleton className="h-3 w-full" />
+                            </div>
+                          ))}
+                        </div>
+                      ) : dashboardData?.new_fraud_patterns?.length > 0 ? (
                         <div className="space-y-2">
                           {dashboardData.new_fraud_patterns.map((pattern, idx) => (
                             <Alert key={idx} className="bg-amber-50 border-amber-200">

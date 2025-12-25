@@ -1,5 +1,5 @@
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../components/logic/firebase';
 
@@ -13,6 +13,8 @@ export function AuthProvider({ children }) {
   const [transactions, setTransactions] = useState([]);
   const [totalSpending, setTotalSpending] = useState(0);
   const [totalReceived, setTotalReceived] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchTransactions = async (upiId) => {
     if (!upiId) return;
@@ -20,7 +22,7 @@ export function AuthProvider({ children }) {
     try {
       const txRef = collection(db, "transactions");
       
-      // Fetch sent transactions (where user is sender AND transactionType is "sent")
+      
       const sentQuery = query(txRef, where("senderUPI", "==", upiId), where("transactionType", "==", "sent"));
       const sentSnapshot = await getDocs(sentQuery);
       const sentList = sentSnapshot.docs.map(d => ({
@@ -29,7 +31,7 @@ export function AuthProvider({ children }) {
         transactionType: "sent"
       }));
       
-      // Fetch received transactions (where user is recipient AND transactionType is "received")
+      
       const receivedQuery = query(txRef, where("recipientUPI", "==", upiId), where("transactionType", "==", "received"));
       const receivedSnapshot = await getDocs(receivedQuery);
       const receivedList = receivedSnapshot.docs.map(d => ({
@@ -38,7 +40,7 @@ export function AuthProvider({ children }) {
         transactionType: "received"
       }));
       
-      // Combine and sort
+      
       const allTransactions = [...sentList, ...receivedList];
       allTransactions.sort((a, b) => {
         const timeA = a.createdAt?.toDate?.() || a.timestamp?.toDate?.() || new Date(0);
@@ -64,6 +66,67 @@ export function AuthProvider({ children }) {
     }
   };
 
+  
+  useEffect(() => {
+    if (!userData?.upiId) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    let unsubscribe = null;
+    const setupListener = async () => {
+      try {
+        const notifRef = collection(db, "notifications");
+        const notifQuery = query(notifRef, where("recipientUPI", "==", userData.upiId));
+
+        unsubscribe = onSnapshot(
+          notifQuery,
+          (snapshot) => {
+            const notifList = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            notifList.sort((a, b) => {
+              const timeA = a.createdAt?.toDate?.() || new Date(0);
+              const timeB = b.createdAt?.toDate?.() || new Date(0);
+              return timeB - timeA;
+            });
+            setNotifications(notifList);
+            setUnreadCount(notifList.filter(n => !n.read).length);
+          },
+          (error) => {
+            console.error("Error fetching notifications:", error);
+            setNotifications([]);
+            setUnreadCount(0);
+          }
+        );
+      } catch (error) {
+        console.error("Error setting up notification listener:", error);
+      }
+    };
+
+    setupListener();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userData?.upiId]);
+
+  const markAsRead = async (notifId) => {
+    try {
+      await updateDoc(doc(db, "notifications", notifId), { read: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifs = notifications.filter(n => !n.read);
+      await Promise.all(unreadNotifs.map(n => updateDoc(doc(db, "notifications", n.id), { read: true })));
+    } catch (error) {
+      console.error("Error marking all as read:", error);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
@@ -75,7 +138,7 @@ export function AuthProvider({ children }) {
           if (userDoc.exists()) {
             const data = userDoc.data();
             setUserData(data);
-            // Fetch transactions after getting user data
+            
             await fetchTransactions(data.upiId);
           }
         } catch (error) {
@@ -108,7 +171,11 @@ export function AuthProvider({ children }) {
       setBalance,
       setTransactions,
       setTotalSpending,
-      setTotalReceived
+      setTotalReceived,
+      notifications,
+      unreadCount,
+      markAsRead,
+      markAllAsRead
     }}>
       {children}
     </AuthContext.Provider>

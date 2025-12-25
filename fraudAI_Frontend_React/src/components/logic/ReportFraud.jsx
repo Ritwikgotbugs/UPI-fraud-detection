@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { useState } from "react";
 import { useAuth } from '../../context/AuthContext';
-import Header from "./Header.jsx";
+import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 import { db } from "./firebase.js";
 
@@ -118,7 +118,7 @@ const ReportFraud = () => {
     setIsSubmitting(true);
 
     try {
-      // Create the fraud report
+      
       await addDoc(collection(db, "fraudReports"), {
         reportedUpiId: searchResult.upiId,
         reportedUserId: searchResult.id,
@@ -133,7 +133,7 @@ const ReportFraud = () => {
         createdAt: serverTimestamp(),
       });
 
-      // Increment the fraud complaints count in the reported user's profile
+      
       if (searchResult.id) {
         const reportedUserRef = doc(db, "users", searchResult.id);
         await updateDoc(reportedUserRef, {
@@ -145,7 +145,7 @@ const ReportFraud = () => {
       setReportSubmitted(true);
       showNotification('success', 'Fraud report submitted successfully. The user\'s fraud complaints count has been updated.');
       
-      // Reset form
+      
       setUpiToReport("");
       setSearchResult(null);
       setFraudType("");
@@ -163,8 +163,8 @@ const ReportFraud = () => {
   const getRiskIndicator = (params) => {
     if (!params) return { level: 'Unknown', color: 'bg-slate-100 text-slate-600', score: 0 };
     
-    // Use same risk calculation as Dashboard for consistency
-    let score = 10; // Base score
+    
+    let score = 10; 
     
     if (params.recipientBlacklistStatus) score += 30;
     if (params.vpnProxyUsage) score += 15;
@@ -184,25 +184,26 @@ const ReportFraud = () => {
     
     const finalScore = Math.min(100, score);
     
-    // Use same thresholds as Dashboard: >=60 high, >=35 medium, else low
+    
     if (finalScore >= 60) return { level: 'High Risk', color: 'bg-red-100 text-red-700', score: finalScore };
     if (finalScore >= 35) return { level: 'Medium Risk', color: 'bg-amber-100 text-amber-700', score: finalScore };
     return { level: 'Low Risk', color: 'bg-emerald-100 text-emerald-700', score: finalScore };
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100">
-      {/* Sidebar */}
-      <div className="hidden lg:block w-64 border-r border-slate-200 bg-white">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block w-64 h-screen sticky top-0 border-r border-slate-200 bg-white">
         <SidebarContent />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* <Header /> */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Navigation */}
+        <MobileNav />
 
         <ScrollArea className="flex-1">
-          <div className="p-6 space-y-6 max-w-4xl mx-auto">
+          <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-4xl mx-auto">
             {/* Page Header */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}

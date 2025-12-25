@@ -25,7 +25,7 @@ const PredictForm = () => {
     1.0,
     1.0,
     0.0
-  ]); // Adjust for your feature count
+  ]); 
   const [prediction, setPrediction] = useState(null);
   const [probability, setProbability] = useState(null);
 

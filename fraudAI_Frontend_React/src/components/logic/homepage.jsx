@@ -8,7 +8,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,17 +20,18 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';
+import MobileNav from './MobileNav';
 import SidebarContent from './SidebarContent';
 import { db } from "./firebase.js";
 
 
     export default function Homepage() {
-        const [showPopup, setShowPopup] = useState(false); // State for managing the pop-up visibility
+        const [showPopup, setShowPopup] = useState(false); 
         const [transactionData, setTransactionData] = useState([]); 
         const [remarks,setRemarks]=useState()
         const [showSimulation, setShowSimulation] = useState(false);
     
-        // Prevent background scrolling when popup is open
+        
         useEffect(() => {
             if (showPopup) {
                 document.body.style.overflow = 'hidden';
@@ -5062,18 +5062,17 @@ import { db } from "./firebase.js";
     ]
     const navigate = useNavigate();
     const handleSendMoney = () => {
-        // Validate amount against balance
+        
         if (Number(amount) > balance) {
           setInsufficientFunds(true);
           return;
         }
         setInsufficientFunds(false);
-        // Pass the transaction details to the TransactionSimulation component
+        
         setShowSimulation(true);
     };
     const getRandomTransaction = () => {
         const randomIndex = Math.floor(Math.random() * data.length);
-        console.log(randomIndex); 
         return data[randomIndex];
     };
     const [user, setUser] = useState(null);
@@ -5085,10 +5084,10 @@ import { db } from "./firebase.js";
     const [amount, setAmount] = useState(100); 
     const [insufficientFunds, setInsufficientFunds] = useState(false);
     
-    // Get balance from context
+    
     const { user: authUser, userData, balance, refreshData } = useAuth();
     
-    // Sync user from context
+    
     useEffect(() => {
       if (authUser) {
         setUser(authUser);
@@ -5108,7 +5107,7 @@ import { db } from "./firebase.js";
           if (!querySnapshot.empty) {
             const userDoc = querySnapshot.docs[0];
             const data = userDoc.data().transactionDetails || {};
-            setTransactionData(Object.entries(data)); // Convert object to array of key-value pairs
+            setTransactionData(Object.entries(data)); 
           } else {
             setTransactionData([]);
           }
@@ -5121,7 +5120,7 @@ import { db } from "./firebase.js";
     
 
     const handleVerifyUPI = async () => {
-        // Normalize and validate the recipient UPI input
+        
         const normalizedUpi = (recipientUpiId || "").trim().toLowerCase();
         if (!normalizedUpi) {
           setVerificationStatus("invalid");
@@ -5131,21 +5130,21 @@ import { db } from "./firebase.js";
         setVerificationStatus("loading");
 
         try {
-          // Reference the "users" collection
+          
           const usersRef = collection(db, "users");
       
-          // Query the collection for a matching UPI ID (use normalized value)
+          
           const q = query(usersRef, where("upiId", "==", normalizedUpi));
           const querySnapshot = await getDocs(q);
       
-          // Check if a matching document was found
+          
           if (querySnapshot.empty) {
             setVerificationStatus("invalid");
             return;
           }
       
-          // Get the first document from the query results
-          const userDoc = querySnapshot.docs[0]; // Assuming UPI ID is unique
+          
+          const userDoc = querySnapshot.docs[0]; 
           const modelData = userDoc.data().modelData;
 
           if (!modelData) {
@@ -5153,7 +5152,7 @@ import { db } from "./firebase.js";
             return;
           }
       
-          // Ensure features are in the correct order
+          
           const features = [
             modelData["Transaction Amount"] || 0,
             modelData["Transaction Frequency"] || 0,
@@ -5181,7 +5180,7 @@ import { db } from "./firebase.js";
       
           console.debug("Features sent to Flask:", features);
       
-          // Use env var or fallback to localhost
+          
           const apiBase = import.meta.env.VITE_API_BASE || 'https://rxcq.pythonanywhere.com';
           const response = await fetch(`${apiBase}/api/predict`, {
             method: "POST",
@@ -5215,9 +5214,9 @@ import { db } from "./firebase.js";
       
       
 
-    // Use the centralized auth helper which supports popup and redirect fallbacks
+    
     import('./auth').then(({ handleGoogleSignIn: signInWithGoogle }) => {
-      window.__signInWithGoogle = signInWithGoogle; // expose for header's onSignIn prop
+      window.__signInWithGoogle = signInWithGoogle; 
     }).catch(() => {});
 
     const handleGoogleSignIn = async (opts = { useRedirect: false }) => {
@@ -5234,7 +5233,7 @@ import { db } from "./firebase.js";
           setUser(res.user);
           setUpiId(res.upiId);
         } else if (res?.fallbackToRedirect) {
-          // Popup blocked by policy -> redirect flow
+          
           await signIn({ useRedirect: true });
         } else if (res?.error) {
           console.error('Sign in failed:', res.error);
@@ -5249,7 +5248,7 @@ import { db } from "./firebase.js";
 
 
     useEffect(() => {
-        // Process redirect result immediately on load (for Google sign-in redirect)
+        
         (async () => {
           try {
             const { handleRedirectResult } = await import('./auth');
@@ -5286,7 +5285,7 @@ import { db } from "./firebase.js";
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                   </svg>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">SafePay AI</h1>
+                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">Fraudulent AI</h1>
                 <p className="text-lg text-slate-500 mb-8 max-w-md">ML-powered UPI fraud detection platform with real-time risk analysis</p>
                 <Button
                   onClick={handleGoogleSignIn}
@@ -5298,14 +5297,16 @@ import { db } from "./firebase.js";
             </motion.div>
           ) : (
             <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+              {/* Desktop Sidebar */}
               <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
                 <SidebarContent />
               </aside>
     
-              <main className="flex-1 overflow-y-auto">
-                {/* <Header user={user} onSignIn={handleGoogleSignIn} /> */}
+              <main className="flex-1 flex flex-col min-w-0">
+                {/* Mobile Navigation */}
+                <MobileNav />
     
-                <div className="p-4 md:p-6 space-y-5">
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5">
                   {/* Page Title */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -5318,40 +5319,6 @@ import { db } from "./firebase.js";
                   <div className="grid gap-5 lg:grid-cols-3">
                     {/* Main Send Form - Takes 2 columns */}
                     <div className="lg:col-span-2 space-y-5">
-                      {/* Quick Amount Selection */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                      >
-                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
-                          <CardContent className="p-5">
-                            <div className="flex items-center justify-between mb-4">
-                              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                                <Zap className="h-4 w-4 text-amber-500" />
-                                Quick Select
-                              </h3>
-                              <Badge variant="outline" className="text-xs text-slate-500 border-slate-200">Tap to select</Badge>
-                            </div>
-                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                              {[100, 200, 500, 1000, 2000, 5000].map((quickAmount) => (
-                                <Button
-                                  key={quickAmount}
-                                  variant="outline"
-                                  onClick={() => setAmount(quickAmount.toString())}
-                                  className={cn(
-                                    "h-11 rounded-xl border-slate-200 bg-slate-50/50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-slate-700 transition-all font-semibold",
-                                    amount === quickAmount.toString() && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
-                                  )}
-                                >
-                                  ₹{quickAmount >= 1000 ? `${quickAmount/1000}K` : quickAmount}
-                                </Button>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-
                       {/* Transfer Form */}
                       <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -5546,7 +5513,7 @@ import { db } from "./firebase.js";
                                 <MessageSquare className="h-4 w-4 text-blue-500" />
                                 Transaction Context
                               </label>
-                              <div className="grid grid-cols-5 gap-2">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                                 {remarkOptions.map((option) => (
                                   <Button
                                     key={option.value}
@@ -5629,6 +5596,37 @@ import { db } from "./firebase.js";
                             <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
                               <CreditCard className="h-4 w-4 text-blue-200" />
                               <span className="text-blue-100 text-sm">{upiId || 'No UPI ID set'}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+
+                      {/* Quick Amount Select */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                      >
+                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
+                          <CardContent className="p-4">
+                            <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-3 text-sm">
+                              <Zap className="h-4 w-4 text-amber-500" />
+                              Quick Amount
+                            </h3>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[100, 200, 500, 1000, 2000, 5000].map((quickAmount) => (
+                                <Button
+                                  key={quickAmount}
+                                  variant="outline"
+                                  onClick={() => setAmount(quickAmount.toString())}
+                                  className={cn(
+                                    "h-9 rounded-lg border-slate-200 bg-slate-50/50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-slate-700 transition-all font-semibold text-xs",
+                                    amount === quickAmount.toString() && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
+                                  )}
+                                >
+                                  ₹{quickAmount >= 1000 ? `${quickAmount/1000}K` : quickAmount}
+                                </Button>
+                              ))}
                             </div>
                           </CardContent>
                         </Card>

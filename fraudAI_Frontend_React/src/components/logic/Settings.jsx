@@ -33,14 +33,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { useAuth } from '../../context/AuthContext';
-import Header from "./Header.jsx";
+import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 import { db } from "./firebase.js";
 
-// Parameters that are auto-calculated from Firebase data
+
 const AUTO_CALCULATED_PARAMS = ['transactionFrequency', 'accountAge', 'timeSinceLastTransaction'];
 
-// 20 ML Model Parameters with descriptions and ranges
+
 const ML_PARAMETERS = [
   {
     id: 'transactionAmount',
@@ -299,7 +299,7 @@ const CATEGORIES = [
   { id: 'merchant', name: 'Merchant', icon: ShieldAlert }
 ];
 
-// Example Profile Presets
+
 const PROFILE_PRESETS = {
   lowRisk: {
     name: 'Low Risk Profile',
@@ -372,7 +372,7 @@ const Settings = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Current parameters state (loaded from Firebase)
+  
   const [parameters, setParameters] = useState(
     ML_PARAMETERS.reduce((acc, param) => {
       acc[param.id] = param.defaultValue;
@@ -380,14 +380,14 @@ const Settings = () => {
     }, {})
   );
 
-  // Original parameters (to detect changes)
+  
   const [originalParameters, setOriginalParameters] = useState({});
 
-  // Calculate auto-parameters from Firebase data
+  
   const calculateAutoParameters = () => {
     const autoParams = {};
 
-    // Calculate Account Age from createdAt
+    
     if (userData?.createdAt) {
       const createdDate = userData.createdAt.toDate ? userData.createdAt.toDate() : new Date(userData.createdAt);
       const now = new Date();
@@ -396,17 +396,17 @@ const Settings = () => {
       autoParams.accountAge = diffDays;
     }
 
-    // Calculate Time Since Last Transaction
+    
     if (transactions && transactions.length > 0) {
-      const lastTx = transactions[0]; // Already sorted by date descending
+      const lastTx = transactions[0]; 
       const lastTxDate = lastTx.createdAt?.toDate?.() || lastTx.timestamp?.toDate?.() || new Date();
       const now = new Date();
       const diffTime = Math.abs(now - lastTxDate);
       const diffHours = Math.round(diffTime / (1000 * 60 * 60));
-      autoParams.timeSinceLastTransaction = Math.min(diffHours, 168); // Cap at 168 hours (1 week)
+      autoParams.timeSinceLastTransaction = Math.min(diffHours, 168); 
     }
 
-    // Calculate Transaction Frequency (transactions per hour over last 24 hours)
+    
     if (transactions && transactions.length > 0) {
       const now = new Date();
       const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -414,14 +414,14 @@ const Settings = () => {
         const txDate = tx.createdAt?.toDate?.() || tx.timestamp?.toDate?.() || new Date(0);
         return txDate >= last24Hours;
       });
-      const frequency = Math.round((recentTxs.length / 24) * 10) / 10; // Round to 1 decimal
+      const frequency = Math.round((recentTxs.length / 24) * 10) / 10; 
       autoParams.transactionFrequency = frequency;
     }
 
     return autoParams;
   };
 
-  // Load user's ML parameters from Firebase on mount
+  
   useEffect(() => {
     const loadUserParameters = () => {
       if (!userData) {
@@ -430,17 +430,17 @@ const Settings = () => {
       }
 
       try {
-        // Get auto-calculated values (used only as fallback)
+        
         const autoParams = calculateAutoParameters();
 
-        // Load from transactionDetails - prioritize saved values over auto-calculated
+        
         const loadedParams = {};
         ML_PARAMETERS.forEach(param => {
-          // Always check Firebase first, then fall back to auto-calculated or default
+          
           if (userData.transactionDetails?.[param.id] !== undefined) {
             loadedParams[param.id] = userData.transactionDetails[param.id];
           } else if (AUTO_CALCULATED_PARAMS.includes(param.id)) {
-            // Only use auto-calculated if no saved value exists
+            
             loadedParams[param.id] = autoParams[param.id] ?? param.defaultValue;
           } else {
             loadedParams[param.id] = param.defaultValue;
@@ -459,7 +459,7 @@ const Settings = () => {
     loadUserParameters();
   }, [userData]);
 
-  // Detect changes
+  
   useEffect(() => {
     const changed = JSON.stringify(parameters) !== JSON.stringify(originalParameters);
     setHasChanges(changed);
@@ -470,16 +470,16 @@ const Settings = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Convert parameters to model-friendly format
+  
   const convertToModelFormat = (params) => {
     const modelData = {};
     ML_PARAMETERS.forEach(param => {
       const value = params[param.id];
-      // Convert to the format expected by the ML model
+      
       if (param.type === 'toggle') {
         modelData[param.modelKey] = value ? 1 : 0;
       } else if (param.type === 'select') {
-        // Map select values to numeric
+        
         if (param.id === 'recipientVerificationStatus') {
           modelData[param.modelKey] = value === 'verified' ? 0 : value === 'recently_registered' ? 1 : 2;
         } else if (param.id === 'geoLocationFlags') {
@@ -504,7 +504,7 @@ const Settings = () => {
     try {
       const userRef = doc(db, "users", user.uid);
       
-      // Save both user-friendly and model-processed formats
+      
       await updateDoc(userRef, {
         transactionDetails: parameters,
         modelData: convertToModelFormat(parameters),
@@ -531,7 +531,7 @@ const Settings = () => {
     showNotification('info', 'Parameters reset to defaults. Click Save to apply.');
   };
 
-  // Recalculate suggested params from Firebase data
+  
   const handleRecalculateSuggested = () => {
     const autoParams = calculateAutoParameters();
     setParameters(prev => ({
@@ -541,7 +541,7 @@ const Settings = () => {
     showNotification('info', 'Suggested values recalculated from your activity. Click Save to apply.');
   };
 
-  // Import a preset profile
+  
   const handleImportPreset = (presetKey) => {
     const preset = PROFILE_PRESETS[presetKey];
     if (preset) {
@@ -668,18 +668,19 @@ const Settings = () => {
   const risk = getRiskProfile();
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100">
-      {/* Sidebar */}
-      <div className="hidden lg:block w-64 border-r border-slate-200 bg-white">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100">
+      {/* Desktop Sidebar */}
+      <div className="hidden md:block w-64 h-screen sticky top-0 border-r border-slate-200 bg-white">
         <SidebarContent />
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* <Header /> */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Navigation */}
+        <MobileNav />
 
         <ScrollArea className="flex-1">
-          <div className="p-6 space-y-6">
+          <div className="p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Page Header */}
             <motion.div
               initial={{ opacity: 0, y: -20 }}

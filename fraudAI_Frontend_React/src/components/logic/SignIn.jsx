@@ -1,11 +1,22 @@
 
 import { Shield, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import { handleGoogleSignIn } from "./auth";
 
 const SignIn = () => {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, navigate]);
 
   const startSignIn = async (useRedirect = false) => {
     setStatus('loading');
@@ -14,6 +25,10 @@ const SignIn = () => {
 
     if (res?.success) {
       setStatus('done');
+      
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 500);
     } else if (res?.redirected) {
       setStatus('redirecting');
     } else if (res?.fallbackToRedirect) {

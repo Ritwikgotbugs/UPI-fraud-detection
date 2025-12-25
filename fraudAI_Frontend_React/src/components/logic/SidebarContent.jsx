@@ -46,7 +46,7 @@ export default function SidebarContent() {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-white overflow-hidden">
       {/* Logo Section - Fixed at top */}
       <div className="flex-shrink-0 p-4 pb-3">
         <div className="flex items-center gap-3">
@@ -181,8 +181,8 @@ export default function SidebarContent() {
         </div>
       </div>
 
-      {/* User Profile & Logout - Fixed at bottom */}
-      <div className="flex-shrink-0 p-3 border-t border-slate-100 bg-white">
+      {/* User Profile & Logout - Pinned to bottom */}
+      <div className="mt-auto p-3 border-t border-slate-100 bg-white flex-shrink-0">
         <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 mb-2">
           <div className="w-9 h-9 bg-gradient-to-br from-blue-400 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm overflow-hidden">
             {userData?.photoURL ? (

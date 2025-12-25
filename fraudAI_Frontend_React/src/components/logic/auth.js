@@ -2,23 +2,23 @@ import { auth, db } from "./firebase";
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
-// Load the mapped transactions JSON
-import mappedTransactions from "./mapped_transactions.json" // Ensure this path is correct
 
-// Helper function to generate unique UPI ID
+import mappedTransactions from "./mapped_transactions.json" 
+
+
 const generateUPIId = (name) => {
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000); // 4-digit random number
-  const baseName = name.split(" ")[0].toLowerCase(); // First name in lowercase
-  return `${baseName}${randomSuffix}@expressbank`;
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000); 
+  const baseName = name.split(" ")[0].toLowerCase(); 
+  return `${baseName}${randomSuffix}@upi`;
 };
 
-// Function to randomly assign a transaction to a user
+
 const getRandomTransaction = () => {
   const randomIndex = Math.floor(Math.random() * mappedTransactions.length);
   return mappedTransactions[randomIndex];
 };
 
-// Ensure user record exists for a given Firebase user
+
 export const createOrUpdateUser = async (user) => {
   if (!user?.uid) {
     console.warn('createOrUpdateUser: No user UID provided');
@@ -62,27 +62,27 @@ export const createOrUpdateUser = async (user) => {
   }
 };
 
-// Try popup sign-in, fallback to redirect for environments where popups are blocked
+
 export const handleGoogleSignIn = async ({ useRedirect = false, autoRedirect = false } = {}) => {
   const provider = new GoogleAuthProvider();
 
   console.debug('handleGoogleSignIn: Starting with useRedirect =', useRedirect, 'autoRedirect =', autoRedirect);
 
-  // If the page is cross-origin isolated (COOP/COEP), popups are likely to be blocked — prefer redirect
+  
   try {
     if (!useRedirect && typeof window !== 'undefined' && window.crossOriginIsolated) {
       console.debug('handleGoogleSignIn: Page is cross-origin isolated, switching to redirect');
       useRedirect = true;
     }
   } catch (e) {
-    // ignore
+    
   }
 
   try {
     if (useRedirect) {
       console.debug('handleGoogleSignIn: Initiating redirect sign-in');
       await signInWithRedirect(auth, provider);
-      // signInWithRedirect does not return here (redirects the page)
+      
       return { redirected: true };
     }
 
@@ -95,7 +95,7 @@ export const handleGoogleSignIn = async ({ useRedirect = false, autoRedirect = f
     console.info('✅ handleGoogleSignIn successful, UPI:', upiId);
     return { success: true, user, upiId };
   } catch (error) {
-    // If this is a COOP/COEP / popup-blocking related error, log a short warning instead of a noisy error
+    
     const msg = (error && (error.message || '')).toLowerCase();
     const isCoopPopupIssue = msg.includes('cross-origin-opener-policy') || msg.includes('window.closed') || msg.includes('popup blocked') || (error.code && error.code === 'auth/popup-blocked');
 
@@ -105,7 +105,7 @@ export const handleGoogleSignIn = async ({ useRedirect = false, autoRedirect = f
       console.error('❌ handleGoogleSignIn error:', error.code, error.message);
     }
 
-    // Fallback: suggest redirect
+    
     const result = { success: false, error, fallbackToRedirect: true };
 
     if (autoRedirect) {
@@ -123,7 +123,7 @@ export const handleGoogleSignIn = async ({ useRedirect = false, autoRedirect = f
   }
 };
 
-// Handle redirect result on app load (call from app init)
+
 export const handleRedirectResult = async () => {
   try {
     console.debug('handleRedirectResult: Checking for redirect payload...');

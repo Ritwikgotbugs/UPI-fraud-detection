@@ -10,7 +10,7 @@ import { db } from './firebase';
 
 const API_BASE = 'https://rxcq.pythonanywhere.com';
 
-// Circular progress ring component for risk score
+
 const RiskProgressRing = ({ score, level }) => {
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
@@ -75,7 +75,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
   const [checkingRecipient, setCheckingRecipient] = useState(true)
   const { refreshData, userData } = useAuth();
 
-  // Fetch recipient's actual profile data from Firebase (their Settings/transactionDetails)
+  
   useEffect(() => {
     const fetchRecipientProfile = async () => {
       if (!upiId) {
@@ -84,21 +84,28 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
       }
 
       try {
-        // Query users collection to find recipient by UPI ID
+        
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("upiId", "==", upiId.toLowerCase()));
         const snapshot = await getDocs(q);
         
         if (!snapshot.empty) {
-          const recipientData = snapshot.docs[0].data();
-          // Get their transactionDetails (fraud profile settings)
-          if (recipientData.transactionDetails || recipientData.modelData) {
+            const recipientData = snapshot.docs[0].data();
+            
             setRecipientProfileData({
               ...recipientData,
-              params: recipientData.transactionDetails || {},
+              params: recipientData.transactionDetails || recipientData.params || {},
               modelData: recipientData.modelData || {}
             });
-          }
+            
+            
+            setTimeout(() => {
+              try {
+                setRiskAnalysis(generateOfflineRiskAnalysis());
+              } catch (e) {
+                
+              }
+            }, 0);
         }
       } catch (error) {
         console.error("Error fetching recipient profile:", error);
@@ -110,7 +117,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
     fetchRecipientProfile();
   }, [upiId]);
 
-  // Prevent background scrolling when popup is open
+  
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -118,34 +125,34 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
     };
   }, []);
 
-  // Generate offline risk analysis based on recipient's actual profile data
+  
   const generateOfflineRiskAnalysis = () => {
-    let riskScore = 10; // Base score
+    let riskScore = 10; 
     const factors = [];
     
-    // Check recipient's actual profile from Firebase
+    
     if (recipientProfileData?.params) {
       const params = recipientProfileData.params;
       
-      // Check if recipient is blacklisted
+      
       if (params.recipientBlacklistStatus) {
         riskScore += 40;
         factors.push('⚠️ Recipient is on a blacklist');
       }
       
-      // Check fraud complaints against recipient
+      
       if (params.fraudComplaintsCount > 0) {
         riskScore += Math.min(params.fraudComplaintsCount * 5, 25);
         factors.push(`${params.fraudComplaintsCount} fraud complaints filed against recipient`);
       }
       
-      // Check past fraudulent behavior
+      
       if (params.pastFraudulentBehavior > 0) {
         riskScore += params.pastFraudulentBehavior * 8;
         factors.push(`${params.pastFraudulentBehavior} past fraud flags on recipient's account`);
       }
       
-      // Check verification status
+      
       if (params.recipientVerificationStatus === 'unverified') {
         riskScore += 20;
         factors.push('Recipient account is unverified');
@@ -154,7 +161,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         factors.push('Recipient account was recently registered');
       }
       
-      // Check geo-location flags
+      
       if (params.geoLocationFlags === 'high-risk') {
         riskScore += 15;
         factors.push('Recipient is in a high-risk geographic location');
@@ -163,25 +170,25 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         factors.push('Recipient has unusual location patterns');
       }
       
-      // Check VPN/Proxy usage
+      
       if (params.vpnProxyUsage) {
         riskScore += 10;
         factors.push('Recipient uses VPN/Proxy services');
       }
       
-      // Check device trust
+      
       if (params.deviceFingerprinting > 0.7) {
         riskScore += 10;
         factors.push('Recipient using untrusted device');
       }
       
-      // Check behavioral biometrics
+      
       if (params.behavioralBiometrics > 0.6) {
         riskScore += 8;
         factors.push('Recipient shows unusual behavioral patterns');
       }
       
-      // Check account age
+      
       if (params.accountAge && params.accountAge < 30) {
         riskScore += 15;
         factors.push(`Recipient account is only ${params.accountAge} days old`);
@@ -190,7 +197,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         factors.push('Recipient account is relatively new');
       }
       
-      // Check social trust score
+      
       if (params.socialTrustScore && params.socialTrustScore < 30) {
         riskScore += 15;
         factors.push(`Recipient has low trust score (${params.socialTrustScore})`);
@@ -199,42 +206,42 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         factors.push(`Recipient has moderate trust score (${params.socialTrustScore})`);
       }
       
-      // Check high-risk transaction times
+      
       if (params.highRiskTransactionTimes) {
         riskScore += 5;
         factors.push('Recipient frequently transacts at unusual hours');
       }
       
-      // Check location inconsistency
+      
       if (params.locationInconsistentTransactions) {
         riskScore += 12;
         factors.push('Recipient has inconsistent transaction locations');
       }
       
-      // Check merchant category mismatch
+      
       if (params.merchantCategoryMismatch) {
         riskScore += 8;
         factors.push('Recipient has category mismatch in transactions');
       }
       
-      // Check daily limit exceeded
+      
       if (params.userDailyLimitExceeded) {
         riskScore += 10;
         factors.push('Recipient frequently exceeds daily limits');
       }
       
-      // Check recent high-value flags
+      
       if (params.recentHighValueFlags > 0) {
         riskScore += params.recentHighValueFlags * 5;
         factors.push(`${params.recentHighValueFlags} recent high-value transaction flags`);
       }
     } else {
-      // No profile data found - could be unknown user
+      
       factors.push('⚠️ Recipient profile data not available');
       riskScore += 15;
     }
     
-    // Check transaction amount
+    
     const numAmount = Number(amount);
     if (numAmount > 50000) {
       riskScore += 30;
@@ -244,19 +251,19 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
       factors.push('High transaction amount (₹20,000+)');
     }
     
-    // Check transaction time
+    
     const hour = new Date().getHours();
     if (hour >= 23 || hour < 5) {
       riskScore += 20;
       factors.push('Late night transaction (high-risk hours)');
     }
     
-    // If everything looks good
+    
     if (factors.length === 0) {
       factors.push('✓ All security checks passed');
     }
     
-    // Determine risk level
+    
     const finalScore = Math.min(100, riskScore);
     const isHighRisk = finalScore >= 60;
     const isMediumRisk = finalScore >= 35 && finalScore < 60;
@@ -277,11 +284,11 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
     };
   };
 
-  // Analyze transaction risk before confirming
+  
   const analyzeRisk = async () => {
     setIsAnalyzing(true);
     try {
-      // Use recipient's actual profile data for the API request
+      
       const recipientParams = recipientProfileData?.params || {};
       const recipientModelData = recipientProfileData?.modelData || {};
       
@@ -299,7 +306,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             screenRes: `${window.screen.width}x${window.screen.height}`
           },
           location: {},
-          // Pass recipient's actual profile data to enhance ML analysis
+          
           recipientProfile: recipientProfileData ? {
             isBlacklisted: recipientParams.recipientBlacklistStatus,
             verificationStatus: recipientParams.recipientVerificationStatus,
@@ -320,7 +327,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         const result = await response.json();
         let analysis = result.risk_assessment;
         
-        // Merge recipient profile data with API response for additional context
+        
         if (recipientProfileData?.params) {
           const additionalFactors = [];
           
@@ -343,7 +350,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             additionalFactors.push(`Recipient has low trust score (${recipientParams.socialTrustScore})`);
           }
           
-          // Calculate additional risk from recipient profile
+          
           let additionalRisk = 0;
           if (recipientParams.recipientBlacklistStatus) additionalRisk += 30;
           if (recipientParams.fraudComplaintsCount > 0) additionalRisk += recipientParams.fraudComplaintsCount * 5;
@@ -356,7 +363,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             recipientProfile: recipientParams
           };
           
-          // Recalculate risk level
+          
           if (analysis.risk_score >= 60) {
             analysis.risk_level = 'high';
             analysis.should_block = true;
@@ -369,14 +376,14 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         setRiskAnalysis(analysis);
         setCurrentStep('risk_review');
       } else {
-        // If API fails, use offline analysis
+        
         const offlineAnalysis = generateOfflineRiskAnalysis();
         setRiskAnalysis(offlineAnalysis);
         setCurrentStep('risk_review');
       }
     } catch (error) {
       console.error('Risk analysis failed:', error);
-      // Use offline analysis if API is unavailable
+      
       const offlineAnalysis = generateOfflineRiskAnalysis();
       setRiskAnalysis(offlineAnalysis);
       setCurrentStep('risk_review');
@@ -386,13 +393,13 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
   };
 
   const handleConfirm = async () => {
-    // First analyze the transaction
+    
     if (!riskAnalysis) {
       await analyzeRisk();
       return;
     }
 
-    // If high risk, require additional confirmation
+    
     if (riskAnalysis?.should_block) {
       setCurrentStep('blocked');
       return;
@@ -401,10 +408,10 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
     setIsLoading(true);
     setCurrentStep("processing");
     try {
-      // Simulate transaction delay
+      
       await new Promise(resolve => setTimeout(resolve, 2000));
   
-      // Prepare transaction data
+      
       const transactionData = {
         amount: Number(amount) || 0,
         recipientUPI: upiId || "",
@@ -420,14 +427,14 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         transactionData.remarks = remarks;
       }
 
-      // Create transaction records
+      
       await addDoc(collection(db, "transactions"), transactionData);
       await addDoc(collection(db, "transactions"), {
         ...transactionData,
         transactionType: "received",
       });
 
-      // Create notifications
+      
       await addDoc(collection(db, "notifications"), {
         recipientUPI: senderUPI,
         type: "sent",
@@ -459,7 +466,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
   };
 
   const proceedAnyway = async () => {
-    // Allow user to proceed even with high risk (with warning)
+    
     setIsLoading(true);
     setCurrentStep("processing");
     try {
@@ -474,7 +481,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         createdAt: serverTimestamp(),
         riskScore: riskAnalysis?.risk_score || 0,
         riskLevel: riskAnalysis?.risk_level || 'low',
-        userOverride: true // Mark that user overrode the warning
+        userOverride: true 
       };
       
       if (remarks && remarks.trim()) {
@@ -778,43 +785,41 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             </div>
 
             {/* Recipient Profile Summary */}
-            {recipientProfileData?.params && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <p className="text-xs font-medium text-slate-500 mb-2">Recipient Profile</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-500">Trust Score:</span>
-                    <span className={`font-semibold ${
-                      recipientProfileData.params.socialTrustScore >= 70 ? 'text-emerald-600' :
-                      recipientProfileData.params.socialTrustScore >= 40 ? 'text-amber-600' : 'text-red-600'
-                    }`}>
-                      {recipientProfileData.params.socialTrustScore || '?'}/100
-                    </span>
+            {recipientProfileData && (
+              (() => {
+                const displayedTrust = recipientProfileData?.params?.socialTrustScore ?? recipientProfileData?.modelData?.socialTrustScore ?? (riskAnalysis ? Math.max(0, 100 - Math.round(riskAnalysis.risk_score || 0)) : null);
+                const accountAge = recipientProfileData?.params?.accountAge ?? '?';
+                const verificationStatus = recipientProfileData?.params?.recipientVerificationStatus ?? 'Unknown';
+                const complaints = recipientProfileData?.params?.fraudComplaintsCount ?? 0;
+
+                const trustClass = displayedTrust >= 70 ? 'text-emerald-600' : displayedTrust >= 40 ? 'text-amber-600' : 'text-red-600';
+
+                return (
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs font-medium text-slate-500 mb-2">Recipient Profile</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Trust Score:</span>
+                        <span className={`font-semibold ${displayedTrust != null ? trustClass : 'text-slate-400'}`}>
+                          {displayedTrust != null ? `${displayedTrust}/100` : '?/100'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Account Age:</span>
+                        <span className="font-semibold text-slate-700">{accountAge} days</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Status:</span>
+                        <span className={`font-semibold ${verificationStatus === 'verified' ? 'text-emerald-600' : 'text-amber-600'}`}>{verificationStatus}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500">Complaints:</span>
+                        <span className={`font-semibold ${complaints > 0 ? 'text-red-600' : 'text-emerald-600'}`}>{complaints}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-500">Account Age:</span>
-                    <span className="font-semibold text-slate-700">
-                      {recipientProfileData.params.accountAge || '?'} days
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-500">Status:</span>
-                    <span className={`font-semibold ${
-                      recipientProfileData.params.recipientVerificationStatus === 'verified' ? 'text-emerald-600' : 'text-amber-600'
-                    }`}>
-                      {recipientProfileData.params.recipientVerificationStatus || 'Unknown'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-500">Complaints:</span>
-                    <span className={`font-semibold ${
-                      recipientProfileData.params.fraudComplaintsCount > 0 ? 'text-red-600' : 'text-emerald-600'
-                    }`}>
-                      {recipientProfileData.params.fraudComplaintsCount || 0}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                )
+              })()
             )}
 
             {/* Transaction Summary */}

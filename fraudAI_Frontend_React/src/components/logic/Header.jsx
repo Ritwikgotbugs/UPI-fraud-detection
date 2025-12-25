@@ -1,31 +1,27 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
-    ArrowDownLeft,
-    ArrowUpRight,
-    Bell,
-    Menu,
-    Search,
-    Wallet,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
+  Menu,
+  Search,
+  Wallet,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { db } from "./firebase";
 import SidebarContent from './SidebarContent';
 
 const Header = ({ user, onSignIn }) => {
-  const { userData } = useAuth();
+  const { userData, notifications, unreadCount, markAsRead, markAllAsRead } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const notificationRef = useRef(null);
 
-  // Close dropdown when clicking outside
+  
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notificationRef.current && !notificationRef.current.contains(event.target)) {
@@ -36,73 +32,7 @@ const Header = ({ user, onSignIn }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch notifications for current user
-  useEffect(() => {
-    if (!userData?.upiId) return;
-
-    let unsubscribe = null;
-
-    const setupListener = async () => {
-      try {
-        const notifRef = collection(db, "notifications");
-        const notifQuery = query(
-          notifRef,
-          where("recipientUPI", "==", userData.upiId)
-        );
-
-        unsubscribe = onSnapshot(
-          notifQuery, 
-          (snapshot) => {
-            const notifList = snapshot.docs.map(d => ({
-              id: d.id,
-              ...d.data(),
-            }));
-            notifList.sort((a, b) => {
-              const timeA = a.createdAt?.toDate?.() || new Date(0);
-              const timeB = b.createdAt?.toDate?.() || new Date(0);
-              return timeB - timeA;
-            });
-            setNotifications(notifList);
-            setUnreadCount(notifList.filter(n => !n.read).length);
-          },
-          (error) => {
-            console.error("Error fetching notifications:", error);
-            setNotifications([]);
-            setUnreadCount(0);
-          }
-        );
-      } catch (error) {
-        console.error("Error setting up notification listener:", error);
-      }
-    };
-
-    setupListener();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [userData?.upiId]);
-
-  const markAsRead = async (notifId) => {
-    try {
-      await updateDoc(doc(db, "notifications", notifId), { read: true });
-    } catch (error) {
-      console.error("Error marking notification as read:", error);
-    }
-  };
-
-  const markAllAsRead = async () => {
-    try {
-      const unreadNotifs = notifications.filter(n => !n.read);
-      await Promise.all(
-        unreadNotifs.map(n => updateDoc(doc(db, "notifications", n.id), { read: true }))
-      );
-    } catch (error) {
-      console.error("Error marking all as read:", error);
-    }
-  };
+  
 
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
@@ -123,10 +53,10 @@ const Header = ({ user, onSignIn }) => {
     const query = e.target.value.toLowerCase();
     setSearchQuery(query);
 
-    // Mock search results
+    
     if (query.length > 0) {
       const mockResults = [
-        { id: 1, type: "UPI", value: `${query}@yesbank` },
+        { id: 1, type: "UPI", value: `${query}@upi` },
         { id: 2, type: "Transaction", value: `Recent transaction with ${query}` },
         { id: 3, type: "Contact", value: query },
       ].filter(r => r.value.toLowerCase().includes(query));
@@ -147,6 +77,7 @@ const Header = ({ user, onSignIn }) => {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0 bg-white border-r border-slate-200">
+              <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
               <SidebarContent />
             </SheetContent>
           </Sheet>
@@ -154,7 +85,7 @@ const Header = ({ user, onSignIn }) => {
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
               <Wallet className="h-4 w-4 text-white" />
             </div>
-            <span className="text-lg font-bold text-slate-800">SafePay<span className="text-blue-600">AI</span></span>
+            <span className="text-lg font-bold text-slate-800">Fraudulent<span className="text-blue-600">AI</span></span>
           </div>
         </div>
         <div className="flex items-center space-x-3">

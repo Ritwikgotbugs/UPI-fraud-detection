@@ -35,7 +35,7 @@ import { Area, AreaChart, Bar, BarChart, Cell, Legend, Pie, PieChart, Responsive
 import Header from "./Header.jsx";
 import SidebarContent from "./SidebarContent";
 
-const API_BASE = 'http://localhost:5000';
+const API_BASE = 'https://rxcq.pythonanywhere.com';
 
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
 

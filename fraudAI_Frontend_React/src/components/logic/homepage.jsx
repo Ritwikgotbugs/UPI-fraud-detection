@@ -5182,7 +5182,7 @@ import { db } from "./firebase.js";
           console.debug("Features sent to Flask:", features);
       
           // Use env var or fallback to localhost
-          const apiBase = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:5000';
+          const apiBase = import.meta.env.VITE_API_BASE || 'https://rxcq.pythonanywhere.com';
           const response = await fetch(`${apiBase}/api/predict`, {
             method: "POST",
             headers: {

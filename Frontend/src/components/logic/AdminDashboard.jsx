@@ -8,31 +8,33 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { collection, getDocs } from 'firebase/firestore';
 import { motion } from "framer-motion";
 import {
-    Activity,
-    AlertTriangle,
-    BarChart3,
-    Brain,
-    Clock,
-    Filter,
-    Gauge,
-    GitBranch,
-    Play,
-    Plus,
-    RefreshCw,
-    Settings,
-    Shield,
-    ShieldAlert,
-    ShieldCheck,
-    Target,
-    Trash2,
-    TrendingUp,
-    Users,
-    Zap
+  Activity,
+  AlertTriangle,
+  BarChart3,
+  Brain,
+  Clock,
+  Filter,
+  Gauge,
+  GitBranch,
+  Play,
+  Plus,
+  RefreshCw,
+  Settings,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Target,
+  Trash2,
+  TrendingUp,
+  Users,
+  Zap
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { db } from './firebase';
 import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 
@@ -401,7 +403,13 @@ const AdminDashboard = () => {
       if (dashboardRes?.ok) {
         setDashboardData(await dashboardRes.json());
       } else {
-        setDashboardData(SAMPLE_DASHBOARD_DATA);
+        
+        try {
+          const firestoreData = await fetchFromFirestore();
+          setDashboardData(firestoreData || SAMPLE_DASHBOARD_DATA);
+        } catch (e) {
+          setDashboardData(SAMPLE_DASHBOARD_DATA);
+        }
       }
       
       if (rulesRes?.ok) {
@@ -485,6 +493,86 @@ const AdminDashboard = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  
+  const fetchFromFirestore = async () => {
+    try {
+      const txSnap = await getDocs(collection(db, 'transactions'));
+      const allTx = txSnap.docs.map(d => ({ id: d.id, ...(d.data() || {}) }));
+
+      const now = new Date();
+      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startWeek = new Date(startToday);
+      startWeek.setDate(startWeek.getDate() - 6);
+
+      const summary = { total_transactions_today: 0, total_transactions_week: 0, high_risk_today: 0, medium_risk_today: 0, blocked_today: 0, total_amount_today: 0 };
+      const trends = {};
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startWeek.getFullYear(), startWeek.getMonth(), startWeek.getDate() + i);
+        const key = d.toISOString().slice(0, 10);
+        trends[key] = { count: 0, amount: 0, high_risk: 0 };
+      }
+
+      const userAgg = {};
+      const hourly = {};
+      for (let h = 0; h < 24; h++) hourly[h] = { count: 0, avg_risk: 0, totalRisk: 0 };
+
+      allTx.forEach(t => {
+        const createdRaw = t.createdAt;
+        let created = null;
+        if (!createdRaw) created = null;
+        else if (createdRaw?.toDate) created = createdRaw.toDate();
+        else if (createdRaw?.seconds) created = new Date(createdRaw.seconds * 1000);
+        else created = new Date(createdRaw);
+
+        if (!created || isNaN(created.getTime())) return;
+
+        if (created >= startToday) {
+          summary.total_transactions_today += 1;
+          summary.total_amount_today += Number(t.amount) || 0;
+          if ((t.riskLevel || t.risk_level) === 'high') summary.high_risk_today += 1;
+          if ((t.riskLevel || t.risk_level) === 'medium') summary.medium_risk_today += 1;
+          if (t.status === 'Blocked' || t.should_block) summary.blocked_today += 1;
+        }
+
+        if (created >= startWeek) {
+          const key = created.toISOString().slice(0, 10);
+          if (!trends[key]) trends[key] = { count: 0, amount: 0, high_risk: 0 };
+          trends[key].count += 1;
+          trends[key].amount += Number(t.amount) || 0;
+          if ((t.riskLevel || t.risk_level) === 'high') trends[key].high_risk += 1;
+          summary.total_transactions_week += 1;
+        }
+
+        const user = t.recipientUPI || t.senderUPI || 'unknown';
+        if (!userAgg[user]) userAgg[user] = { sum: 0, count: 0 };
+        userAgg[user].sum += Number(t.riskScore || t.risk_score || 0);
+        userAgg[user].count += 1;
+
+        const hour = created.getHours();
+        hourly[hour].count += 1;
+        hourly[hour].totalRisk += Number(t.riskScore || t.risk_score || 0);
+      });
+
+      const top_risky_users = Object.entries(userAgg).map(([user, v]) => ({ user_id: user, avg_risk: v.count ? v.sum / v.count : 0, count: v.count })).sort((a, b) => b.avg_risk - a.avg_risk).slice(0, 6);
+
+      const hourly_risk_distribution = Object.fromEntries(Object.entries(hourly).map(([h, val]) => [h, { count: val.count, avg_risk: val.count ? Math.round(val.totalRisk / val.count) : 0 }]));
+
+      return {
+        summary,
+        trends,
+        top_risky_users,
+        new_fraud_patterns: [],
+        payee_trust_distribution: { high: 0, medium: 0, low: 0, unknown: 100 },
+        hourly_risk_distribution,
+        feedback_stats: { total_feedback: 0, fraud_reports: 0, false_positives: 0, feedback_rate: 0 },
+        feature_importance: []
+      };
+    } catch (error) {
+      console.error('Firestore fallback failed:', error);
+      return SAMPLE_DASHBOARD_DATA;
     }
   };
 

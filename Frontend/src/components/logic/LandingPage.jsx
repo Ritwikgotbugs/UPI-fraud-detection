@@ -84,7 +84,7 @@ export default function LandingPage() {
     {
       name: 'Ritwik Sharma',
       role: 'Software Developer',
-      image: '/src/assets/ritwik.png',
+      image: '/assets/ritwik.png',
       bio: 'Full-stack developer passionate about AI/ML and building secure financial systems.',
       linkedin: 'https://linkedin.com/in/ritwik-sharma-8714b4221/',
       github: 'https://github.com/Ritwikgotbugs'
@@ -92,7 +92,7 @@ export default function LandingPage() {
     {
       name: 'Samyak Tripathi',
       role: 'Decision Analyst Associate',
-      image: '/src/assets/samyak.png',
+      image: '/assets/samyak.png',
       bio: 'Decision analyst focused on developing intelligent fraud detection algorithms and data-driven solutions.',
       linkedin: 'https://www.linkedin.com/in/samyak-tripathi-97bab3251/',
       github: 'https://github.com/sammy-314'

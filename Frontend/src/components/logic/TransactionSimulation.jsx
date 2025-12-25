@@ -66,7 +66,8 @@ const RiskProgressRing = ({ score, level }) => {
   );
 };
 
-const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) => {
+const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, initialRecipientProfile = null }) => {
+  const isSelfTransfer = (upiId || '').trim().toLowerCase() === (senderUPI || '').trim().toLowerCase();
   const [currentStep, setCurrentStep] = useState('details')
   const [isLoading, setIsLoading] = useState(false)
   const [riskAnalysis, setRiskAnalysis] = useState(null)
@@ -78,6 +79,16 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
   
   useEffect(() => {
     const fetchRecipientProfile = async () => {
+      if (initialRecipientProfile) {
+        setRecipientProfileData(initialRecipientProfile);
+        setCheckingRecipient(false);
+        try {
+          const offline = generateOfflineRiskAnalysis();
+          setRiskAnalysis(offline);
+          setCurrentStep('risk_review');
+        } catch (e) {}
+        return;
+      }
       if (!upiId) {
         setCheckingRecipient(false);
         return;
@@ -127,32 +138,28 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
 
   
   const generateOfflineRiskAnalysis = () => {
-    let riskScore = 10; 
+    let riskScore = 10;
     const factors = [];
+
     
-    
-    if (recipientProfileData?.params) {
+    if (recipientProfileData?.params && Object.keys(recipientProfileData.params).length > 0) {
       const params = recipientProfileData.params;
-      
-      
+
       if (params.recipientBlacklistStatus) {
         riskScore += 40;
         factors.push('⚠️ Recipient is on a blacklist');
       }
-      
-      
-      if (params.fraudComplaintsCount > 0) {
-        riskScore += Math.min(params.fraudComplaintsCount * 5, 25);
+
+      if ((params.fraudComplaintsCount || 0) > 0) {
+        riskScore += Math.min((params.fraudComplaintsCount || 0) * 5, 25);
         factors.push(`${params.fraudComplaintsCount} fraud complaints filed against recipient`);
       }
-      
-      
-      if (params.pastFraudulentBehavior > 0) {
-        riskScore += params.pastFraudulentBehavior * 8;
+
+      if ((params.pastFraudulentBehavior || 0) > 0) {
+        riskScore += (params.pastFraudulentBehavior || 0) * 8;
         factors.push(`${params.pastFraudulentBehavior} past fraud flags on recipient's account`);
       }
-      
-      
+
       if (params.recipientVerificationStatus === 'unverified') {
         riskScore += 20;
         factors.push('Recipient account is unverified');
@@ -160,8 +167,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         riskScore += 10;
         factors.push('Recipient account was recently registered');
       }
-      
-      
+
       if (params.geoLocationFlags === 'high-risk') {
         riskScore += 15;
         factors.push('Recipient is in a high-risk geographic location');
@@ -169,26 +175,22 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         riskScore += 8;
         factors.push('Recipient has unusual location patterns');
       }
-      
-      
+
       if (params.vpnProxyUsage) {
         riskScore += 10;
         factors.push('Recipient uses VPN/Proxy services');
       }
-      
-      
-      if (params.deviceFingerprinting > 0.7) {
+
+      if ((params.deviceFingerprinting || 0) > 0.7) {
         riskScore += 10;
         factors.push('Recipient using untrusted device');
       }
-      
-      
-      if (params.behavioralBiometrics > 0.6) {
+
+      if ((params.behavioralBiometrics || 0) > 0.6) {
         riskScore += 8;
         factors.push('Recipient shows unusual behavioral patterns');
       }
-      
-      
+
       if (params.accountAge && params.accountAge < 30) {
         riskScore += 15;
         factors.push(`Recipient account is only ${params.accountAge} days old`);
@@ -196,45 +198,99 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
         riskScore += 5;
         factors.push('Recipient account is relatively new');
       }
-      
-      
-      if (params.socialTrustScore && params.socialTrustScore < 30) {
+
+      if ((params.socialTrustScore || 0) < 30) {
         riskScore += 15;
         factors.push(`Recipient has low trust score (${params.socialTrustScore})`);
-      } else if (params.socialTrustScore && params.socialTrustScore < 50) {
+      } else if ((params.socialTrustScore || 0) < 50) {
         riskScore += 8;
         factors.push(`Recipient has moderate trust score (${params.socialTrustScore})`);
       }
-      
-      
+
       if (params.highRiskTransactionTimes) {
         riskScore += 5;
         factors.push('Recipient frequently transacts at unusual hours');
       }
-      
-      
+
       if (params.locationInconsistentTransactions) {
         riskScore += 12;
         factors.push('Recipient has inconsistent transaction locations');
       }
-      
-      
+
       if (params.merchantCategoryMismatch) {
         riskScore += 8;
         factors.push('Recipient has category mismatch in transactions');
       }
-      
-      
+
       if (params.userDailyLimitExceeded) {
         riskScore += 10;
         factors.push('Recipient frequently exceeds daily limits');
       }
-      
-      
-      if (params.recentHighValueFlags > 0) {
-        riskScore += params.recentHighValueFlags * 5;
+
+      if ((params.recentHighValueFlags || 0) > 0) {
+        riskScore += (params.recentHighValueFlags || 0) * 5;
         factors.push(`${params.recentHighValueFlags} recent high-value transaction flags`);
       }
+
+    } else if (recipientProfileData?.modelData && Object.keys(recipientProfileData.modelData).length > 0) {
+      
+      const m = recipientProfileData.modelData;
+
+      if ((m['Recipient Blacklist Status'] || m['Recipient Blacklist Status'] === 1) && m['Recipient Blacklist Status'] > 0.5) {
+        riskScore += 40;
+        factors.push('⚠️ Recipient is likely blacklisted (model)');
+      }
+
+      if ((m['Fraud Complaints Count'] || 0) > 0.1) {
+        const c = Math.round((m['Fraud Complaints Count'] || 0) * 5) || 1;
+        riskScore += Math.min(c * 5, 25);
+        factors.push(`${c} fraud complaints flagged by model`);
+      }
+
+      if ((m['Past Fraudulent Behavior Flags'] || 0) > 0.5) {
+        riskScore += 16;
+        factors.push('Past fraudulent behavior flagged by model');
+      }
+
+      if ((m['Recipient Verification Status_suspicious'] || 0) > 0.5) {
+        riskScore += 15;
+        factors.push('Recipient verification appears suspicious (model)');
+      }
+
+      if ((m['VPN or Proxy Usage'] || 0) > 0.5) {
+        riskScore += 10;
+        factors.push('VPN/Proxy usage detected by model');
+      }
+
+      if ((m['Device Fingerprinting'] || 0) > 0.7) {
+        riskScore += 8;
+        factors.push('Untrusted device fingerprint detected (model)');
+      }
+
+      
+      let socialTrust = null;
+      if (typeof m['Social Trust Score'] !== 'undefined') {
+        socialTrust = m['Social Trust Score'] > 1 ? Math.round(m['Social Trust Score']) : Math.round(m['Social Trust Score'] * 100);
+        if (socialTrust < 30) {
+          riskScore += 15;
+          factors.push(`Model indicates low trust (${socialTrust}/100)`);
+        } else if (socialTrust < 50) {
+          riskScore += 8;
+          factors.push(`Model indicates moderate trust (${socialTrust}/100)`);
+        }
+      }
+
+      
+      if (typeof m['Account Age'] !== 'undefined' && m['Account Age'] < 0.2) {
+        riskScore += 12;
+        factors.push('Model indicates recipient account is very new');
+      }
+
+      
+      if (factors.length === 0) {
+        factors.push('✓ No prominent flags from model');
+      }
+
     } else {
       
       factors.push('⚠️ Recipient profile data not available');
@@ -262,9 +318,16 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
     if (factors.length === 0) {
       factors.push('✓ All security checks passed');
     }
+
+    let finalScore = Math.min(100, riskScore);
+
     
-    
-    const finalScore = Math.min(100, riskScore);
+    const trustFromParams = recipientProfileData?.params?.socialTrustScore;
+    const trustFromModel = recipientProfileData?.modelData?.['Social Trust Score'];
+    const trustVal = typeof trustFromParams !== 'undefined' ? trustFromParams : (typeof trustFromModel !== 'undefined' ? (trustFromModel > 1 ? trustFromModel : Math.round(trustFromModel * 100)) : null);
+    if (trustVal != null && (factors.length === 1 && factors[0].startsWith('✓'))) {
+      finalScore = Math.min(100, 100 - Number(trustVal));
+    }
     const isHighRisk = finalScore >= 60;
     const isMediumRisk = finalScore >= 35 && finalScore < 60;
     
@@ -720,10 +783,16 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             </motion.div>
 
             {/* Action Button */}
+            {isSelfTransfer && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-3">
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+                <p className="text-red-600 text-sm font-medium">Recipient UPI matches sender UPI — transfers to self are not allowed.</p>
+              </div>
+            )}
             <motion.div variants={itemVariants}>
               <Button
                 onClick={handleConfirm}
-                disabled={isAnalyzing}
+                disabled={isAnalyzing || isSelfTransfer}
                 className="w-full h-14 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-xl font-semibold text-base shadow-lg shadow-blue-500/25 transition-all duration-300"
               >
                 {isAnalyzing ? (
@@ -787,7 +856,9 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose }) =
             {/* Recipient Profile Summary */}
             {recipientProfileData && (
               (() => {
-                const displayedTrust = recipientProfileData?.params?.socialTrustScore ?? recipientProfileData?.modelData?.socialTrustScore ?? (riskAnalysis ? Math.max(0, 100 - Math.round(riskAnalysis.risk_score || 0)) : null);
+                const rawModelTrust = recipientProfileData?.modelData?.['Social Trust Score'];
+                const modelTrust = typeof rawModelTrust !== 'undefined' ? (rawModelTrust > 1 ? rawModelTrust : Math.round(rawModelTrust * 100)) : null;
+                const displayedTrust = recipientProfileData?.params?.socialTrustScore ?? modelTrust ?? (riskAnalysis ? Math.max(0, 100 - Math.round(riskAnalysis.risk_score || 0)) : null);
                 const accountAge = recipientProfileData?.params?.accountAge ?? '?';
                 const verificationStatus = recipientProfileData?.params?.recipientVerificationStatus ?? 'Unknown';
                 const complaints = recipientProfileData?.params?.fraudComplaintsCount ?? 0;

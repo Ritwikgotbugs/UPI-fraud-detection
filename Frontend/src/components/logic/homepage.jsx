@@ -28,6 +28,10 @@ import { db } from "./firebase.js";
     export default function Homepage() {
         const [showPopup, setShowPopup] = useState(false); 
         const [transactionData, setTransactionData] = useState([]); 
+        const [verificationTrust, setVerificationTrust] = useState(null);
+        const [verificationRisk, setVerificationRisk] = useState(null);
+        const [recipientProfileForSimulation, setRecipientProfileForSimulation] = useState(null);
+        const [selfTransferError, setSelfTransferError] = useState(false);
         const [remarks,setRemarks]=useState()
         const [showSimulation, setShowSimulation] = useState(false);
     
@@ -5068,7 +5072,16 @@ import { db } from "./firebase.js";
           return;
         }
         setInsufficientFunds(false);
+
         
+        const normalizedRecipient = (recipientUpiId || '').trim().toLowerCase();
+        const currentUpi = (userData?.upiId || upiId || '').toLowerCase();
+        if (normalizedRecipient && currentUpi && normalizedRecipient === currentUpi) {
+          setSelfTransferError(true);
+          return;
+        }
+        setSelfTransferError(false);
+
         setShowSimulation(true);
     };
     const getRandomTransaction = () => {
@@ -5140,6 +5153,7 @@ import { db } from "./firebase.js";
           
           if (querySnapshot.empty) {
             setVerificationStatus("invalid");
+            setVerificationTrust(null);
             return;
           }
       
@@ -5149,6 +5163,7 @@ import { db } from "./firebase.js";
 
           if (!modelData) {
             setVerificationStatus("invalid");
+            setVerificationTrust(null);
             return;
           }
       
@@ -5200,6 +5215,30 @@ import { db } from "./firebase.js";
             throw new Error("Invalid response from backend");
           }
       
+          
+          const userFriendly = userDoc.data().transactionDetails || {};
+          const rawTrust = userFriendly["Social Trust Score"] ?? modelData["Social Trust Score"];
+          const trustDisplay = rawTrust == null ? null : (rawTrust > 1 ? Math.round(rawTrust) : Math.round(rawTrust * 100));
+          setVerificationTrust(trustDisplay);
+
+          
+          const recipientProfile = {
+            ...userDoc.data(),
+            params: userDoc.data().transactionDetails || userDoc.data().params || {},
+            modelData: modelData || {}
+          };
+          setRecipientProfileForSimulation(recipientProfile);
+
+          
+          const params = recipientProfile.params || {};
+          let vr = 'low';
+          if (params.recipientBlacklistStatus || (params.fraudComplaintsCount || 0) > 0 || (params.pastFraudulentBehavior || 0) > 0 || (trustDisplay != null && trustDisplay < 30)) {
+            vr = 'high';
+          } else if ((trustDisplay != null && trustDisplay < 50) || params.recipientVerificationStatus === 'recently_registered' || (params.accountAge && params.accountAge < 90)) {
+            vr = 'medium';
+          }
+          setVerificationRisk(vr);
+
           if (result.prediction[0] === 1) {
             setVerificationStatus("fraud");
           } else {
@@ -5398,6 +5437,18 @@ import { db } from "./firebase.js";
                                         <div>
                                           <p className="font-medium text-emerald-700 text-sm">UPI ID Verified</p>
                                           <p className="text-xs text-emerald-500">Ready to send money</p>
+                                          {verificationTrust != null && (
+                                            <p className="text-xs mt-1">
+                                              <span className="text-slate-500">Trust Score: </span>
+                                              <span className={`font-semibold ${verificationTrust >= 70 ? 'text-emerald-600' : verificationTrust >= 40 ? 'text-amber-600' : 'text-red-600'}`}>{verificationTrust}/100</span>
+                                            </p>
+                                          )}
+                                          {verificationRisk && (
+                                            <p className="text-xs mt-1">
+                                              <span className="text-slate-500">Risk: </span>
+                                              <span className={`${verificationRisk === 'high' ? 'text-red-600 font-semibold' : verificationRisk === 'medium' ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold'}`}>{verificationRisk.toUpperCase()}</span>
+                                            </p>
+                                          )}
                                         </div>
                                       </div>
                                     )}
@@ -5412,6 +5463,14 @@ import { db } from "./firebase.js";
                                             <p className="text-xs text-red-500">This UPI ID is flagged as suspicious</p>
                                           </div>
                                         </div>
+                                        {verificationTrust != null && (
+                                          <div className="text-xs text-red-600">
+                                            Low trust score ({verificationTrust}/100)
+                                          </div>
+                                        )}
+                                        {verificationRisk === 'high' && (
+                                          <div className="text-xs text-red-600">Risk level: HIGH — do not proceed without careful verification.</div>
+                                        )}
                                         <Button
                                           variant="outline"
                                           size="sm"
@@ -5543,6 +5602,12 @@ import { db } from "./firebase.js";
                             </div>
 
                             {/* Submit Button */}
+                            {selfTransferError && (
+                              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-3">
+                                <AlertTriangle className="h-4 w-4 text-red-500" />
+                                <p className="text-red-600 text-sm font-medium">You cannot send money to the same UPI ID as your account.</p>
+                              </div>
+                            )}
                             <Button 
                               onClick={handleSendMoney} 
                               disabled={insufficientFunds || !amount || Number(amount) <= 0 || !recipientUpiId || verificationStatus !== "valid"}
@@ -5642,6 +5707,7 @@ import { db } from "./firebase.js";
                       amount={amount} 
                       remarks={remarks} 
                       senderUPI={upiId}
+                      initialRecipientProfile={recipientProfileForSimulation}
                       onClose={() => setShowSimulation(false)}
                     />
                   )}

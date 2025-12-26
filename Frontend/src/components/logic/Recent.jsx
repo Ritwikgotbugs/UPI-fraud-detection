@@ -4,9 +4,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { motion } from "framer-motion"
-import { ArrowDownLeft, ArrowUpRight, Calendar, Filter, Receipt, Search, TrendingDown, TrendingUp, X } from 'lucide-react'
+import { AnimatePresence, motion } from "framer-motion"
+import { ArrowDownLeft, ArrowUpRight, Calendar, ChevronDown, ChevronUp, Filter, Receipt, Search, TrendingDown, TrendingUp, User, X } from 'lucide-react'
 import { useEffect, useState } from "react"
 import { useAuth } from '../../context/AuthContext'
 import MobileNav from "./MobileNav"
@@ -18,7 +19,12 @@ const RecentTransactions = () => {
   const [searchTerm, setSearchTerm] = useState("")
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState("all") 
+  const [filter, setFilter] = useState("all")
+  const [expandedGroups, setExpandedGroups] = useState({})
+
+  const toggleGroup = (upiId) => {
+    setExpandedGroups(prev => ({ ...prev, [upiId]: !prev[upiId] }));
+  };
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -28,31 +34,31 @@ const RecentTransactions = () => {
       }
 
       try {
-        
+
         const transactionsCollection = collection(db, "transactions");
-        
-        
+
+
         const sentQuery = query(transactionsCollection, where("senderUPI", "==", userData.upiId), where("transactionType", "==", "sent"));
         const sentSnapshot = await getDocs(sentQuery);
-        const sentTransactions = sentSnapshot.docs.map(d => ({ 
-          id: d.id, 
+        const sentTransactions = sentSnapshot.docs.map(d => ({
+          id: d.id,
           ...d.data(),
           transactionType: "sent"
         }));
 
-        
+
         const receivedQuery = query(transactionsCollection, where("recipientUPI", "==", userData.upiId), where("transactionType", "==", "received"));
         const receivedSnapshot = await getDocs(receivedQuery);
-        const receivedTransactions = receivedSnapshot.docs.map(d => ({ 
-          id: d.id, 
+        const receivedTransactions = receivedSnapshot.docs.map(d => ({
+          id: d.id,
           ...d.data(),
           transactionType: "received"
         }));
 
-        
+
         const allTransactions = [...sentTransactions, ...receivedTransactions]
           .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        
+
         setTransactions(allTransactions);
       } catch (error) {
         console.error("Error fetching transactions:", error);
@@ -65,12 +71,12 @@ const RecentTransactions = () => {
   }, [userData?.upiId]);
 
   const filteredTransactions = transactions.filter((transaction) => {
-    
+
     if (filter === "sent" && transaction.transactionType !== "sent") return false;
     if (filter === "received" && transaction.transactionType !== "received") return false;
-    
+
     if (!searchTerm.trim()) return true;
-    
+
     const term = searchTerm.toLowerCase()
     const senderUPI = (transaction.senderUPI || "").toLowerCase()
     const recipientUPI = (transaction.recipientUPI || "").toLowerCase()
@@ -85,7 +91,29 @@ const RecentTransactions = () => {
     )
   })
 
-  
+  // Group transactions sequentially by counterparty (run-length grouping)
+  const groupedSequences = [];
+  filteredTransactions.forEach((transaction) => {
+    const counterparty = transaction.transactionType === 'received'
+      ? transaction.senderUPI
+      : (transaction.recipientUPI || 'Unknown');
+
+    const lastGroup = groupedSequences[groupedSequences.length - 1];
+
+    // Check if the current transaction belongs to the same counterparty as the last group
+    if (lastGroup && lastGroup.upiId === counterparty) {
+      lastGroup.transactions.push(transaction);
+    } else {
+      // Start a new group
+      groupedSequences.push({
+        upiId: counterparty,
+        transactions: [transaction],
+        groupId: `${counterparty}-${groupedSequences.length}`
+      });
+    }
+  });
+
+
   const totalSent = transactions.filter(t => t.transactionType === 'sent').reduce((acc, t) => acc + (t.amount || 0), 0);
   const totalReceived = transactions.filter(t => t.transactionType === 'received').reduce((acc, t) => acc + (t.amount || 0), 0);
 
@@ -93,11 +121,24 @@ const RecentTransactions = () => {
     if (!timestamp?.seconds) return '—';
     const date = new Date(timestamp.seconds * 1000);
     const now = new Date();
-    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
+
+    const isToday = date.getDate() === now.getDate() &&
+      date.getMonth() === now.getMonth() &&
+      date.getFullYear() === now.getFullYear();
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.getDate() === yesterday.getDate() &&
+      date.getMonth() === yesterday.getMonth() &&
+      date.getFullYear() === yesterday.getFullYear();
+
+    if (isToday) return 'Today';
+    if (isYesterday) return 'Yesterday';
+
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (diffDays < 7) return `${diffDays} days ago`;
+
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
@@ -198,7 +239,7 @@ const RecentTransactions = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                     {searchTerm && (
-                      <button 
+                      <button
                         onClick={() => setSearchTerm('')}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                       >
@@ -206,18 +247,17 @@ const RecentTransactions = () => {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Filter Buttons */}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setFilter("all")}
-                      className={`h-10 px-4 rounded-xl transition-all ${
-                        filter === "all" 
-                          ? "bg-blue-50 border-blue-300 text-blue-600" 
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
+                      className={`h-10 px-4 rounded-xl transition-all ${filter === "all"
+                        ? "bg-blue-50 border-blue-300 text-blue-600"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
                     >
                       <Filter className="h-4 w-4 mr-1.5" />
                       All
@@ -226,11 +266,10 @@ const RecentTransactions = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => setFilter("received")}
-                      className={`h-10 px-4 rounded-xl transition-all ${
-                        filter === "received" 
-                          ? "bg-emerald-50 border-emerald-300 text-emerald-600" 
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
+                      className={`h-10 px-4 rounded-xl transition-all ${filter === "received"
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-600"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
                     >
                       <ArrowDownLeft className="h-4 w-4 mr-1.5" />
                       Received
@@ -239,11 +278,10 @@ const RecentTransactions = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => setFilter("sent")}
-                      className={`h-10 px-4 rounded-xl transition-all ${
-                        filter === "sent" 
-                          ? "bg-rose-50 border-rose-300 text-rose-600" 
-                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
+                      className={`h-10 px-4 rounded-xl transition-all ${filter === "sent"
+                        ? "bg-rose-50 border-rose-300 text-rose-600"
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
                     >
                       <ArrowUpRight className="h-4 w-4 mr-1.5" />
                       Sent
@@ -278,85 +316,128 @@ const RecentTransactions = () => {
                     </p>
                   </div>
                 ) : (
-                  <div className="divide-y divide-slate-100">
-                    {filteredTransactions.map((transaction, index) => (
-                      <motion.div
-                        key={transaction.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="flex items-center justify-between p-4 hover:bg-slate-50/80 transition-colors cursor-pointer group"
-                      >
-                        <div className="flex items-center gap-4">
-                          {/* Icon */}
-                          <div className={`p-2.5 rounded-xl transition-transform group-hover:scale-110 ${
-                            transaction.transactionType === 'received' 
-                              ? 'bg-emerald-100 text-emerald-600' 
-                              : 'bg-rose-100 text-rose-600'
-                          }`}>
-                            {transaction.transactionType === 'received' 
-                              ? <ArrowDownLeft className="h-5 w-5" /> 
-                              : <ArrowUpRight className="h-5 w-5" />
-                            }
-                          </div>
-                          
-                          {/* Details */}
-                          <div>
-                            <p className="font-semibold text-slate-800">
-                              {transaction.transactionType === 'received' 
-                                ? transaction.senderUPI 
-                                : transaction.recipientUPI || '—'
-                              }
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs text-slate-400 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {formatDate(transaction.createdAt)}
-                              </span>
-                              <span className="text-slate-300">•</span>
-                              <span className="text-xs text-slate-400">{formatTime(transaction.createdAt)}</span>
-                              {transaction.remarks && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span className="text-xs text-slate-500 capitalize">{transaction.remarks}</span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Amount & Status */}
-                        <div className="text-right">
-                          <p className={`text-lg font-bold ${
-                            transaction.transactionType === 'received' 
-                              ? 'text-emerald-600' 
-                              : 'text-rose-600'
-                          }`}>
-                            {transaction.transactionType === 'received' ? '+' : '-'}₹{transaction.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
-                          </p>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] mt-1 ${
-                              transaction.status === "Completed"
-                                ? "bg-emerald-50 text-emerald-600 border-emerald-200"
-                                : transaction.status === "Pending"
-                                ? "bg-amber-50 text-amber-600 border-amber-200"
-                                : "bg-red-50 text-red-600 border-red-200"
-                            }`}
+                  <div className="space-y-4 bg-slate-100">
+                    {groupedSequences.map((group, groupIndex) => {
+                      const groupTxs = group.transactions;
+                      const latestTx = groupTxs[0];
+                      const upiId = group.upiId;
+                      const groupId = group.groupId;
+                      const isExpanded = expandedGroups[groupId];
+                      const txCount = groupTxs.length;
+
+                      return (
+                        <motion.div
+                          key={groupId}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: groupIndex * 0.05 }}
+                          className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-blue-300 transition-colors"
+                        >
+                          {/* Group Header */}
+                          <div
+                            onClick={() => toggleGroup(groupId)}
+                            className="flex items-center justify-between p-4 cursor-pointer bg-slate-50/50 hover:bg-slate-100/50 transition-colors"
                           >
-                            {transaction.status || 'Completed'}
-                          </Badge>
-                        </div>
-                      </motion.div>
-                    ))}
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                <User className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-slate-800 text-sm md:text-base">{upiId}</h3>
+                                <p className="text-xs text-slate-500">
+                                  Last active: {formatDate(latestTx.createdAt)} • {txCount} transaction{txCount !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full">
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                            </Button>
+                          </div>
+
+                          {/* Expanded List */}
+                          <AnimatePresence>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                              >
+                                <div className="divide-y divide-slate-100 border-t border-slate-100">
+                                  {groupTxs.map((transaction) => (
+                                    <div
+                                      key={transaction.id}
+                                      className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+                                    >
+                                      <div className="flex items-center gap-4">
+                                        <div className={`p-2 rounded-lg ${transaction.transactionType === 'received'
+                                          ? 'bg-emerald-50 text-emerald-600'
+                                          : 'bg-rose-50 text-rose-600'
+                                          }`}>
+                                          {transaction.transactionType === 'received'
+                                            ? <ArrowDownLeft className="h-4 w-4" />
+                                            : <ArrowUpRight className="h-4 w-4" />
+                                          }
+                                        </div>
+
+                                        <div>
+                                          <p className="font-medium text-slate-700 text-sm">
+                                            {transaction.transactionType === 'received' ? 'Received' : 'Sent'}
+                                          </p>
+                                          <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-xs text-slate-400 flex items-center gap-1">
+                                              <Calendar className="h-3 w-3" />
+                                              {formatDate(transaction.createdAt)}
+                                            </span>
+                                            <span className="text-slate-300">•</span>
+                                            <span className="text-xs text-slate-400">{formatTime(transaction.createdAt)}</span>
+                                            {transaction.remarks && (
+                                              <>
+                                                <span className="text-slate-300">•</span>
+                                                <span className="text-xs text-slate-500 capitalize">{transaction.remarks}</span>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="text-right">
+                                        <p className={`font-bold text-sm ${transaction.transactionType === 'received'
+                                          ? 'text-emerald-600'
+                                          : 'text-rose-600'
+                                          }`}>
+                                          {transaction.transactionType === 'received' ? '+' : '-'}₹{transaction.amount?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                                        </p>
+                                        <Badge
+                                          variant="outline"
+                                          className={`text-[10px] mt-1 scale-90 origin-right ${transaction.status === "Completed"
+                                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                                            : transaction.status === "Pending"
+                                              ? "bg-amber-50 text-amber-600 border-amber-200"
+                                              : "bg-red-50 text-red-600 border-red-200"
+                                            }`}
+                                        >
+                                          {transaction.status || 'Completed'}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      );
+                    })}
                   </div>
+
                 )}
               </CardContent>
             </Card>
           </motion.div>
         </div>
-      </main>
-    </div>
+      </main >
+    </div >
   )
 }
 

@@ -11,25 +11,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { doc, updateDoc } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-    AlertTriangle,
-    CheckCircle,
-    Download,
-    Filter,
-    Flag,
-    Gauge,
-    HelpCircle,
-    Info,
-    Loader2,
-    RefreshCw,
-    Save,
-    Settings as SettingsIcon,
-    Shield,
-    ShieldAlert,
-    ShieldCheck,
-    Sliders,
-    User,
-    UserX,
-    Zap
+  AlertTriangle,
+  CheckCircle,
+  Download,
+  Filter,
+  Flag,
+  Gauge,
+  HelpCircle,
+  Info,
+  Loader2,
+  RefreshCw,
+  Save,
+  Settings as SettingsIcon,
+  Shield,
+  ShieldAlert,
+  ShieldCheck,
+  Sliders,
+  User,
+  UserX,
+  Zap
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { useAuth } from '../../context/AuthContext';
@@ -372,7 +372,7 @@ const Settings = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  
+
   const [parameters, setParameters] = useState(
     ML_PARAMETERS.reduce((acc, param) => {
       acc[param.id] = param.defaultValue;
@@ -380,14 +380,14 @@ const Settings = () => {
     }, {})
   );
 
-  
+
   const [originalParameters, setOriginalParameters] = useState({});
 
-  
+
   const calculateAutoParameters = () => {
     const autoParams = {};
 
-    
+
     if (userData?.createdAt) {
       const createdDate = userData.createdAt.toDate ? userData.createdAt.toDate() : new Date(userData.createdAt);
       const now = new Date();
@@ -396,17 +396,17 @@ const Settings = () => {
       autoParams.accountAge = diffDays;
     }
 
-    
+
     if (transactions && transactions.length > 0) {
-      const lastTx = transactions[0]; 
+      const lastTx = transactions[0];
       const lastTxDate = lastTx.createdAt?.toDate?.() || lastTx.timestamp?.toDate?.() || new Date();
       const now = new Date();
       const diffTime = Math.abs(now - lastTxDate);
       const diffHours = Math.round(diffTime / (1000 * 60 * 60));
-      autoParams.timeSinceLastTransaction = Math.min(diffHours, 168); 
+      autoParams.timeSinceLastTransaction = Math.min(diffHours, 168);
     }
 
-    
+
     if (transactions && transactions.length > 0) {
       const now = new Date();
       const last24Hours = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -414,14 +414,14 @@ const Settings = () => {
         const txDate = tx.createdAt?.toDate?.() || tx.timestamp?.toDate?.() || new Date(0);
         return txDate >= last24Hours;
       });
-      const frequency = Math.round((recentTxs.length / 24) * 10) / 10; 
+      const frequency = Math.round((recentTxs.length / 24) * 10) / 10;
       autoParams.transactionFrequency = frequency;
     }
 
     return autoParams;
   };
 
-  
+
   useEffect(() => {
     const loadUserParameters = () => {
       if (!userData) {
@@ -430,18 +430,21 @@ const Settings = () => {
       }
 
       try {
-        
+
         const autoParams = calculateAutoParameters();
 
-        
+
         const loadedParams = {};
         ML_PARAMETERS.forEach(param => {
-          
-          if (userData.transactionDetails?.[param.id] !== undefined) {
+
+          if (AUTO_CALCULATED_PARAMS.includes(param.id)) {
+            // Always prefer auto-calculated values for dynamic metrics
+            // accountAge, timeSinceLastTransaction, transactionFrequency
+            loadedParams[param.id] = autoParams[param.id] !== undefined
+              ? autoParams[param.id]
+              : (userData.transactionDetails?.[param.id] ?? param.defaultValue);
+          } else if (userData.transactionDetails?.[param.id] !== undefined) {
             loadedParams[param.id] = userData.transactionDetails[param.id];
-          } else if (AUTO_CALCULATED_PARAMS.includes(param.id)) {
-            
-            loadedParams[param.id] = autoParams[param.id] ?? param.defaultValue;
           } else {
             loadedParams[param.id] = param.defaultValue;
           }
@@ -457,9 +460,9 @@ const Settings = () => {
     };
 
     loadUserParameters();
-  }, [userData]);
+  }, [userData, transactions]);
 
-  
+
   useEffect(() => {
     const changed = JSON.stringify(parameters) !== JSON.stringify(originalParameters);
     setHasChanges(changed);
@@ -470,16 +473,16 @@ const Settings = () => {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  
+
   const convertToModelFormat = (params) => {
     const modelData = {};
     ML_PARAMETERS.forEach(param => {
       const value = params[param.id];
-      
+
       if (param.type === 'toggle') {
         modelData[param.modelKey] = value ? 1 : 0;
       } else if (param.type === 'select') {
-        
+
         if (param.id === 'recipientVerificationStatus') {
           modelData[param.modelKey] = value === 'verified' ? 0 : value === 'recently_registered' ? 1 : 2;
         } else if (param.id === 'geoLocationFlags') {
@@ -503,8 +506,8 @@ const Settings = () => {
     setSaving(true);
     try {
       const userRef = doc(db, "users", user.uid);
-      
-      
+
+
       await updateDoc(userRef, {
         transactionDetails: parameters,
         modelData: convertToModelFormat(parameters),
@@ -531,7 +534,7 @@ const Settings = () => {
     showNotification('info', 'Parameters reset to defaults. Click Save to apply.');
   };
 
-  
+
   const handleRecalculateSuggested = () => {
     const autoParams = calculateAutoParameters();
     setParameters(prev => ({
@@ -541,7 +544,7 @@ const Settings = () => {
     showNotification('info', 'Suggested values recalculated from your activity. Click Save to apply.');
   };
 
-  
+
   const handleImportPreset = (presetKey) => {
     const preset = PROFILE_PRESETS[presetKey];
     if (preset) {
@@ -563,7 +566,7 @@ const Settings = () => {
     }));
   };
 
-  const filteredParameters = ML_PARAMETERS.filter(param => 
+  const filteredParameters = ML_PARAMETERS.filter(param =>
     selectedCategory === 'all' || param.category === selectedCategory
   );
 
@@ -581,7 +584,7 @@ const Settings = () => {
     if (parameters.locationInconsistentTransactions) riskScore += 15;
     if (parameters.merchantCategoryMismatch) riskScore += 10;
     if (parameters.userDailyLimitExceeded) riskScore += 15;
-    
+
     if (riskScore >= 60) return { level: 'High Risk', color: 'bg-red-500', textColor: 'text-red-700', bgColor: 'bg-red-50', description: 'Your profile may be flagged by the ML model' };
     if (riskScore >= 30) return { level: 'Medium Risk', color: 'bg-orange-500', textColor: 'text-orange-700', bgColor: 'bg-orange-50', description: 'Some parameters may raise alerts' };
     if (riskScore >= 10) return { level: 'Low Risk', color: 'bg-yellow-500', textColor: 'text-yellow-700', bgColor: 'bg-yellow-50', description: 'Minor risk factors detected' };
@@ -607,7 +610,7 @@ const Settings = () => {
             )}
           </div>
         );
-      
+
       case 'slider':
         return (
           <div className="flex items-center gap-3 w-full max-w-xs">
@@ -626,7 +629,7 @@ const Settings = () => {
             </span>
           </div>
         );
-      
+
       case 'select':
         return (
           <Select value={currentValue} onValueChange={(value) => onChange(param.id, value)} disabled={disabled}>
@@ -642,24 +645,22 @@ const Settings = () => {
             </SelectContent>
           </Select>
         );
-      
+
       case 'toggle':
         return (
           <button
             onClick={() => !disabled && onChange(param.id, !currentValue)}
             disabled={disabled}
-            className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${
-              currentValue ? 'bg-blue-500' : 'bg-slate-300'
-            } ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
+            className={`relative w-14 h-7 rounded-full transition-colors duration-200 ${currentValue ? 'bg-blue-500' : 'bg-slate-300'
+              } ${disabled ? 'opacity-50 cursor-not-allowed pointer-events-none' : 'cursor-pointer'}`}
           >
             <span
-              className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ease-in-out ${
-                currentValue ? 'translate-x-7' : 'translate-x-0'
-              }`}
+              className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform duration-200 ease-in-out ${currentValue ? 'translate-x-7' : 'translate-x-0'
+                }`}
             />
           </button>
         );
-      
+
       default:
         return null;
     }
@@ -757,9 +758,9 @@ const Settings = () => {
                   exit={{ opacity: 0, y: -10 }}
                 >
                   <Alert className={
-                    notification.type === 'success' ? 'border-green-200 bg-green-50' : 
-                    notification.type === 'info' ? 'border-blue-200 bg-blue-50' :
-                    'border-red-200 bg-red-50'
+                    notification.type === 'success' ? 'border-green-200 bg-green-50' :
+                      notification.type === 'info' ? 'border-blue-200 bg-blue-50' :
+                        'border-red-200 bg-red-50'
                   }>
                     {notification.type === 'success' ? (
                       <CheckCircle className="h-4 w-4 text-green-600" />
@@ -769,9 +770,9 @@ const Settings = () => {
                       <AlertTriangle className="h-4 w-4 text-red-600" />
                     )}
                     <AlertDescription className={
-                      notification.type === 'success' ? 'text-green-700' : 
-                      notification.type === 'info' ? 'text-blue-700' :
-                      'text-red-700'
+                      notification.type === 'success' ? 'text-green-700' :
+                        notification.type === 'info' ? 'text-blue-700' :
+                          'text-red-700'
                     }>
                       {notification.message}
                     </AlertDescription>
@@ -1004,20 +1005,19 @@ const Settings = () => {
                       <p className="text-slate-500">Loading your settings...</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                       {filteredParameters.map((param, index) => (
                         <motion.div
                           key={param.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.02 }}
-                          className={`p-4 rounded-xl transition-all duration-200 ${
-                            param.autoCalculated
-                              ? 'bg-emerald-50 border-2 border-emerald-200 shadow-sm'
-                              : isEditing 
-                                ? 'bg-blue-50 border-2 border-blue-200 shadow-sm' 
-                                : 'bg-white border border-slate-200 shadow-sm hover:shadow-md'
-                          }`}
+                          className={`p-4 rounded-xl transition-all duration-200 ${param.autoCalculated
+                            ? 'bg-emerald-50 border-2 border-emerald-200 shadow-sm'
+                            : isEditing
+                              ? 'bg-blue-50 border-2 border-blue-200 shadow-sm'
+                              : 'bg-white border border-slate-200 shadow-sm hover:shadow-md'
+                            }`}
                         >
                           <div className="flex items-center gap-2 mb-3">
                             <Label className="text-sm font-semibold text-slate-800 flex-1">
@@ -1074,9 +1074,9 @@ const Settings = () => {
                     <div>
                       <h3 className="font-semibold text-slate-700 mb-1">How your settings are used</h3>
                       <p className="text-sm text-slate-600">
-                        When you send or receive money, the ML fraud detection model uses these parameters 
-                        along with real-time transaction data to calculate a risk score. Lower risk scores 
-                        indicate safer transactions. Keep your profile accurate to ensure smooth transactions 
+                        When you send or receive money, the ML fraud detection model uses these parameters
+                        along with real-time transaction data to calculate a risk score. Lower risk scores
+                        indicate safer transactions. Keep your profile accurate to ensure smooth transactions
                         and reduce false fraud alerts.
                       </p>
                     </div>

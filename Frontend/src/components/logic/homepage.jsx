@@ -1,21 +1,11 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronRight, CreditCard, FileText, IndianRupee, MessageSquare, Rocket, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle, Zap } from 'lucide-react';
-import { useEffect, useState } from "react";
+import { AlertTriangle, Check, ChevronRight, CreditCard, FileText, History, IndianRupee, MessageSquare, Rocket, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle, Zap } from 'lucide-react';
+import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
@@ -23,5515 +13,846 @@ import TransactionSimulation from '../logic/TransactionSimulation';
 import MobileNav from './MobileNav';
 import SidebarContent from './SidebarContent';
 import { db } from "./firebase.js";
+import QRCode from "react-qr-code";
+import { QrReader } from "react-qr-reader";
+import { Scan, QrCode, Camera, Minimize2 } from 'lucide-react';
 
 
-    export default function Homepage() {
-        const [showPopup, setShowPopup] = useState(false); 
-        const [transactionData, setTransactionData] = useState([]); 
-        const [verificationTrust, setVerificationTrust] = useState(null);
-        const [verificationRisk, setVerificationRisk] = useState(null);
-        const [recipientProfileForSimulation, setRecipientProfileForSimulation] = useState(null);
-        const [selfTransferError, setSelfTransferError] = useState(false);
-        const [remarks,setRemarks]=useState()
-        const [showSimulation, setShowSimulation] = useState(false);
-    
-        
-        useEffect(() => {
-            if (showPopup) {
-                document.body.style.overflow = 'hidden';
-            } else {
-                document.body.style.overflow = 'unset';
-            }
-            return () => {
-                document.body.style.overflow = 'unset';
-            };
-        }, [showPopup]);
+export default function Homepage() {
+  const [showPopup, setShowPopup] = useState(false);
+  const [transactionData, setTransactionData] = useState([]);
+  const [verificationTrust, setVerificationTrust] = useState(null);
+  const [verificationRisk, setVerificationRisk] = useState(null);
+  const [recipientProfileForSimulation, setRecipientProfileForSimulation] = useState(null);
+  const [selfTransferError, setSelfTransferError] = useState(false);
+  const [remarks, setRemarks] = useState()
+  const [showSimulation, setShowSimulation] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
-        const remarkOptions = [
-            { value: "first_time", label: "First-time Recipient" },
-            { value: "recurring", label: "Recurring Payment" },
-            { value: "urgent", label: "Urgent/Emergency" },
-            { value: "high_value", label: "High-Value Transfer" },
-            { value: "unknown", label: "Unknown Contact" },
-          ];
-    
 
-    const generateUPIId = (name) => {
-        const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-        const baseName = name.split(" ")[0].toLowerCase();
-        
-        return `${baseName}${randomSuffix}@yesbank`;
-    };
-    const data= [
-    {
-        "user_friendly": {
-            "Transaction Amount": 36.907065522,
-            "Transaction Frequency": 6,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.3572874504,
-            "Time Since Last Transaction": 23.8259484208,
-            "Social Trust Score": 17.225761541,
-            "Account Age": 3.9342898511,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5205771171,
-            "Transaction Context Anomalies": 0.7471434728,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.007772198,
-            "Transaction Frequency": 0.4615384615,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1190841842,
-            "Time Since Last Transaction": 0.7942634013,
-            "Social Trust Score": 0.1721738243,
-            "Account Age": 0.786936131,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4140030852,
-            "Transaction Context Anomalies": 0.1869060353,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 37.8792088019,
-            "Transaction Frequency": 0,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.5679113362,
-            "Time Since Last Transaction": 8.6921691336,
-            "Social Trust Score": 87.5128382825,
-            "Account Age": 0.1654474727,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6986908725,
-            "Transaction Context Anomalies": 0.631338942,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0079769523,
-            "Transaction Frequency": 0.0,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.1892930732,
-            "Time Since Last Transaction": 0.2897591761,
-            "Social Trust Score": 0.8752220188,
-            "Account Age": 0.0329058891,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5557675537,
-            "Transaction Context Anomalies": 0.15793259,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1250.9850770386,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4200523517,
-            "Time Since Last Transaction": 14.6066219247,
-            "Social Trust Score": 5.9179457384,
-            "Account Age": 2.9280836587,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.6536756032,
-            "Transaction Context Anomalies": 0.648835109,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2634831884,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1400060942,
-            "Time Since Last Transaction": 0.486925156,
-            "Social Trust Score": 0.0590671217,
-            "Account Age": 0.5856250062,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.519938958,
-            "Transaction Context Anomalies": 0.1623100028,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2972.5055676644,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.7950776281,
-            "Time Since Last Transaction": 23.7919639111,
-            "Social Trust Score": 72.8006643718,
-            "Account Age": 4.4146991924,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.3419251999,
-            "Transaction Context Anomalies": 0.1572892871,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.6260724995,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5983539056,
-            "Time Since Last Transaction": 0.7931304835,
-            "Social Trust Score": 0.7280631414,
-            "Account Age": 0.8830513663,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.2718102825,
-            "Transaction Context Anomalies": 0.0393288388,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 501.3349597414,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.4473422599,
-            "Time Since Last Transaction": 6.9295725763,
-            "Social Trust Score": 39.9418730407,
-            "Account Age": 4.629732418,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6539386144,
-            "Transaction Context Anomalies": 0.1969439967,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1055907201,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1491028505,
-            "Time Since Last Transaction": 0.2310007262,
-            "Social Trust Score": 0.399392282,
-            "Account Age": 0.9260729466,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5201482942,
-            "Transaction Context Anomalies": 0.0492501567,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 342.9098176409,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.8151869152,
-            "Time Since Last Transaction": 8.4423384387,
-            "Social Trust Score": 81.7765071622,
-            "Account Age": 0.9116702311,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.1472360066,
-            "Transaction Context Anomalies": 1.5018243873,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0722229714,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2717193547,
-            "Time Since Last Transaction": 0.2814307448,
-            "Social Trust Score": 0.8178442272,
-            "Account Age": 0.1822022699,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1168530758,
-            "Transaction Context Anomalies": 0.375721672,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 298.5398736997,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7050796533,
-            "Time Since Last Transaction": 8.9298536201,
-            "Social Trust Score": 52.4103937474,
-            "Account Age": 3.0082319845,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4819075368,
-            "Transaction Context Anomalies": 0.0110620668,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0628777051,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2350164494,
-            "Time Since Last Transaction": 0.2976826977,
-            "Social Trust Score": 0.5241089636,
-            "Account Age": 0.6016602381,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3832251564,
-            "Transaction Context Anomalies": 0.0027438594,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 3720.8614548522,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1680072634,
-            "Time Since Last Transaction": 19.5894310441,
-            "Social Trust Score": 42.5913287369,
-            "Account Age": 3.0372146395,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6204585017,
-            "Transaction Context Anomalies": 1.3285517984,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.783692375,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0559899554,
-            "Time Since Last Transaction": 0.6530335818,
-            "Social Trust Score": 0.4258935271,
-            "Account Age": 0.6074587821,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4935007713,
-            "Transaction Context Anomalies": 0.3323701395,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 516.7514351732,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1284206394,
-            "Time Since Last Transaction": 5.7721470795,
-            "Social Trust Score": 50.9073101746,
-            "Account Age": 0.4361433122,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3563843416,
-            "Transaction Context Anomalies": 0.7242887308,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.108837762,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0427942398,
-            "Time Since Last Transaction": 0.1924164412,
-            "Social Trust Score": 0.5090743336,
-            "Account Age": 0.0870638583,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2833186162,
-            "Transaction Context Anomalies": 0.1811879463,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 77.2061710223,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.0208877084,
-            "Time Since Last Transaction": 19.1017710573,
-            "Social Trust Score": 33.5101199453,
-            "Account Age": 1.8417824571,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2821992862,
-            "Transaction Context Anomalies": 1.0202964587,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.016260058,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.0069494561,
-            "Time Since Last Transaction": 0.6367768016,
-            "Social Trust Score": 0.3350585153,
-            "Account Age": 0.3682893164,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2242731768,
-            "Transaction Context Anomalies": 0.2552469115,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 3359.7820807619,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.8987769366,
-            "Time Since Last Transaction": 22.1848108591,
-            "Social Trust Score": 78.1243848215,
-            "Account Age": 2.2412964399,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.3377514224,
-            "Transaction Context Anomalies": 1.5668940664,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.7076412782,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2995830631,
-            "Time Since Last Transaction": 0.7395539452,
-            "Social Trust Score": 0.7813137847,
-            "Account Age": 0.4482198614,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.2684882856,
-            "Transaction Context Anomalies": 0.392001629,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2168.0952420151,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.5974659808,
-            "Time Since Last Transaction": 2.8462164214,
-            "Social Trust Score": 33.4822574206,
-            "Account Age": 0.4279666931,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4192554079,
-            "Transaction Context Anomalies": 0.5335450575,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4566463513,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1991447515,
-            "Time Since Last Transaction": 0.0948767354,
-            "Social Trust Score": 0.3347798197,
-            "Account Age": 0.0854279665,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3333590147,
-            "Transaction Context Anomalies": 0.1334652764,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 199.8884685655,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.597883593,
-            "Time Since Last Transaction": 0.6733002407,
-            "Social Trust Score": 33.8648630683,
-            "Account Age": 0.4627576042,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5938848212,
-            "Transaction Context Anomalies": 1.808895339,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0420995934,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1992839574,
-            "Time Since Last Transaction": 0.022439747,
-            "Social Trust Score": 0.338606842,
-            "Account Age": 0.0923885652,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4723502224,
-            "Transaction Context Anomalies": 0.4525485748,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1043.265641371,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.157384878,
-            "Time Since Last Transaction": 7.2332594521,
-            "Social Trust Score": 97.7901228419,
-            "Account Age": 3.7388386328,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4384417348,
-            "Transaction Context Anomalies": 0.9841263795,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2197329993,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0524491135,
-            "Time Since Last Transaction": 0.2411245234,
-            "Social Trust Score": 0.9780208075,
-            "Account Age": 0.7478323123,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3486298141,
-            "Transaction Context Anomalies": 0.2461974226,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 60.6593944935,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "unusual",
-            "Behavioral Biometrics": 1.6108253346,
-            "Time Since Last Transaction": 12.9552650433,
-            "Social Trust Score": 55.8957919665,
-            "Account Age": 3.9216637319,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3179700025,
-            "Transaction Context Anomalies": 0.4451912092,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0127749503,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5369356634,
-            "Time Since Last Transaction": 0.4318750255,
-            "Social Trust Score": 0.5589717441,
-            "Account Age": 0.7844100303,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2527438392,
-            "Transaction Context Anomalies": 0.1113597908,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 1
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1508.8936493816,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.0820647828,
-            "Time Since Last Transaction": 19.4345457488,
-            "Social Trust Score": 1.3766206327,
-            "Account Age": 1.7631403237,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6261718723,
-            "Transaction Context Anomalies": 2.2343190603,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3178042912,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0273420835,
-            "Time Since Last Transaction": 0.647870279,
-            "Social Trust Score": 0.0136424069,
-            "Account Age": 0.3525554276,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4980481626,
-            "Transaction Context Anomalies": 0.5589864735,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 108.9381683713,
-            "Transaction Frequency": 7,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.0260680242,
-            "Time Since Last Transaction": 19.4234020413,
-            "Social Trust Score": 80.0713701733,
-            "Account Age": 0.0475032721,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.519115974,
-            "Transaction Context Anomalies": 0.8355601929,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0229435004,
-            "Transaction Frequency": 0.5384615385,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0086762508,
-            "Time Since Last Transaction": 0.647498789,
-            "Social Trust Score": 0.800788553,
-            "Account Age": 0.0093088571,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4128401309,
-            "Transaction Context Anomalies": 0.209027251,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 538.8122805563,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.2500080591,
-            "Time Since Last Transaction": 0.861256076,
-            "Social Trust Score": 64.8215104559,
-            "Account Age": 4.2018863358,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4080010255,
-            "Transaction Context Anomalies": 0.5882868739,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1134842515,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0833239149,
-            "Time Since Last Transaction": 0.0287054994,
-            "Social Trust Score": 0.6482514603,
-            "Account Age": 0.840474014,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.324401416,
-            "Transaction Context Anomalies": 0.1471612779,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 246.7236648458,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1040270843,
-            "Time Since Last Transaction": 13.2783953471,
-            "Social Trust Score": 96.0894578387,
-            "Account Age": 2.2197709381,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3373364226,
-            "Transaction Context Anomalies": 1.1022123487,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.051964095,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.0346629474,
-            "Time Since Last Transaction": 0.4426469947,
-            "Social Trust Score": 0.9610098645,
-            "Account Age": 0.4439132659,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2681579786,
-            "Transaction Context Anomalies": 0.2757416671,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1221.161952435,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.9969243324,
-            "Time Since Last Transaction": 17.9054977131,
-            "Social Trust Score": 64.947111921,
-            "Account Age": 3.9010053069,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.5739334955,
-            "Transaction Context Anomalies": 0.1924136383,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2572017958,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3322992937,
-            "Time Since Last Transaction": 0.596897473,
-            "Social Trust Score": 0.649507792,
-            "Account Age": 0.7802769104,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.4564705443,
-            "Transaction Context Anomalies": 0.0481166942,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 810.7452027894,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4661101588,
-            "Time Since Last Transaction": 7.6184986318,
-            "Social Trust Score": 37.6965817356,
-            "Account Age": 4.3795633227,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.040535139,
-            "Transaction Context Anomalies": 0.1782149329,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1707591845,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.1553588993,
-            "Time Since Last Transaction": 0.2539669728,
-            "Social Trust Score": 0.3769337011,
-            "Account Age": 0.876021752,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.0319276204,
-            "Transaction Context Anomalies": 0.0445642821,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1131.2455476107,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.2756015223,
-            "Time Since Last Transaction": 9.0975760862,
-            "Social Trust Score": 44.8585400154,
-            "Account Age": 4.4893159211,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2884544194,
-            "Transaction Context Anomalies": 1.4865145389,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2382634634,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.425192917,
-            "Time Since Last Transaction": 0.3032739444,
-            "Social Trust Score": 0.448571363,
-            "Account Age": 0.8979798946,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2292517683,
-            "Transaction Context Anomalies": 0.3718912601,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 988.9214289075,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.3107158552,
-            "Time Since Last Transaction": 12.5511791544,
-            "Social Trust Score": 9.6879205017,
-            "Account Age": 1.5706905158,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4342941952,
-            "Transaction Context Anomalies": 0.6071579522,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2082869371,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1035601142,
-            "Time Since Last Transaction": 0.4184042966,
-            "Social Trust Score": 0.096776386,
-            "Account Age": 0.3140520994,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3453287006,
-            "Transaction Context Anomalies": 0.1518826835,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 665.7807391335,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.2039493052,
-            "Time Since Last Transaction": 2.7397090589,
-            "Social Trust Score": 62.4382642349,
-            "Account Age": 1.7865663035,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.1782579289,
-            "Transaction Context Anomalies": 0.5652253298,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1402265448,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4013085293,
-            "Time Since Last Transaction": 0.0913261739,
-            "Social Trust Score": 0.6244129821,
-            "Account Age": 0.3572422506,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1415440736,
-            "Transaction Context Anomalies": 0.1413914485,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1327.1567015092,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.9791181688,
-            "Time Since Last Transaction": 27.40978275,
-            "Social Trust Score": 57.8709968818,
-            "Account Age": 2.3184013424,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4309643159,
-            "Transaction Context Anomalies": 0.0865836611,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2795265739,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3263638275,
-            "Time Since Last Transaction": 0.9137351821,
-            "Social Trust Score": 0.5787287793,
-            "Account Age": 0.4636461972,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3426783798,
-            "Transaction Context Anomalies": 0.0216388091,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 84.2647172066,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.50129732,
-            "Time Since Last Transaction": 7.4646611531,
-            "Social Trust Score": 0.6323350751,
-            "Account Age": 1.4636281374,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6888330964,
-            "Transaction Context Anomalies": 1.100240554,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0177467399,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.167088108,
-            "Time Since Last Transaction": 0.2488386002,
-            "Social Trust Score": 0.0061976725,
-            "Account Age": 0.2926321876,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5479215433,
-            "Transaction Context Anomalies": 0.2752483385,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 143.5385942818,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.8129823125,
-            "Time Since Last Transaction": 25.0650274464,
-            "Social Trust Score": 9.1383295996,
-            "Account Age": 4.3195509642,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.1534729934,
-            "Transaction Context Anomalies": 1.0175659407,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0302310957,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2709844774,
-            "Time Since Last Transaction": 0.835569713,
-            "Social Trust Score": 0.0912790896,
-            "Account Age": 0.8640151121,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.1218172242,
-            "Transaction Context Anomalies": 0.2545637559,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 98.5193027241,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.129091793,
-            "Time Since Last Transaction": 10.7430598369,
-            "Social Trust Score": 11.0522381564,
-            "Account Age": 2.8735765536,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4487677593,
-            "Transaction Context Anomalies": 0.2344836336,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0207490628,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0430179606,
-            "Time Since Last Transaction": 0.3581282864,
-            "Social Trust Score": 0.1104230065,
-            "Account Age": 0.5747197993,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3568485133,
-            "Transaction Context Anomalies": 0.0586422988,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 54.6271006634,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7259924069,
-            "Time Since Last Transaction": 26.6998612854,
-            "Social Trust Score": 85.5755514365,
-            "Account Age": 0.7272255645,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.382139338,
-            "Transaction Context Anomalies": 1.1601784353,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0115044192,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2419874593,
-            "Time Since Last Transaction": 0.8900690263,
-            "Social Trust Score": 0.85584426,
-            "Account Age": 0.1453005259,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3038175573,
-            "Transaction Context Anomalies": 0.2902443574,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1195.4380696618,
-            "Transaction Frequency": 7,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4560646151,
-            "Time Since Last Transaction": 29.6796803954,
-            "Social Trust Score": 51.4793707953,
-            "Account Age": 0.4353978025,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2893492224,
-            "Transaction Context Anomalies": 1.2177884479,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2517837918,
-            "Transaction Frequency": 0.5384615385,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1520103406,
-            "Time Since Last Transaction": 0.9894051738,
-            "Social Trust Score": 0.5147963839,
-            "Account Age": 0.0869147045,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2299639608,
-            "Transaction Context Anomalies": 0.3046579605,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2222.4668231662,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.6475961884,
-            "Time Since Last Transaction": 21.0109350793,
-            "Social Trust Score": 68.0769896041,
-            "Account Age": 2.8754667503,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2587380449,
-            "Transaction Context Anomalies": 0.7095822795,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4680981779,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.5491927765,
-            "Time Since Last Transaction": 0.7004212686,
-            "Social Trust Score": 0.6808144697,
-            "Account Age": 0.57509797,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2055998835,
-            "Transaction Context Anomalies": 0.1775084999,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 441.7218413673,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.5290575075,
-            "Time Since Last Transaction": 0.1357394861,
-            "Social Trust Score": 0.5478806624,
-            "Account Age": 4.2527750236,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5578721408,
-            "Transaction Context Anomalies": 0.5747262306,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0930349128,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.176341626,
-            "Time Since Last Transaction": 0.0045194598,
-            "Social Trust Score": 0.0053529152,
-            "Account Age": 0.850655286,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4436869758,
-            "Transaction Context Anomalies": 0.1437685043,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 652.6377003741,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.1159108094,
-            "Time Since Last Transaction": 22.2589245457,
-            "Social Trust Score": 69.3759538292,
-            "Account Age": 0.5003033837,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3897739116,
-            "Transaction Context Anomalies": 1.0881951692,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1374583376,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3719619765,
-            "Time Since Last Transaction": 0.7420246214,
-            "Social Trust Score": 0.6938073909,
-            "Account Age": 0.0999003288,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3098940744,
-            "Transaction Context Anomalies": 0.2722346715,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 545.0609295744,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.9635769108,
-            "Time Since Last Transaction": 14.6740676314,
-            "Social Trust Score": 2.4699971938,
-            "Account Age": 0.2627160496,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7436398107,
-            "Transaction Context Anomalies": 0.1349640304,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1148003516,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.6545210748,
-            "Time Since Last Transaction": 0.4891735464,
-            "Social Trust Score": 0.0245789325,
-            "Account Age": 0.0523663603,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5915433551,
-            "Transaction Context Anomalies": 0.0337432231,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1065.4013887161,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.0791164637,
-            "Time Since Last Transaction": 5.7243633078,
-            "Social Trust Score": 29.6110367257,
-            "Account Age": 3.3092637242,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6164587051,
-            "Transaction Context Anomalies": 1.374985204,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2243952647,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0263592975,
-            "Time Since Last Transaction": 0.190823507,
-            "Social Trust Score": 0.2960578405,
-            "Account Age": 0.6618874943,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4903172494,
-            "Transaction Context Anomalies": 0.3439874374,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 953.3787933034,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4115295504,
-            "Time Since Last Transaction": 2.1723527229,
-            "Social Trust Score": 55.3865507584,
-            "Account Age": 0.0875836829,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4775935117,
-            "Transaction Context Anomalies": 1.1402220282,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2008008922,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.137165123,
-            "Time Since Last Transaction": 0.0724126121,
-            "Social Trust Score": 0.5538780465,
-            "Account Age": 0.0173277231,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3797915334,
-            "Transaction Context Anomalies": 0.2852514105,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 889.6560454061,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.8170442706,
-            "Time Since Last Transaction": 12.3177620174,
-            "Social Trust Score": 23.7474417235,
-            "Account Age": 1.2594415344,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5042366534,
-            "Transaction Context Anomalies": 1.2682809287,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1873795084,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2723384813,
-            "Time Since Last Transaction": 0.4106230326,
-            "Social Trust Score": 0.2374070889,
-            "Account Age": 0.2517806852,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.400997368,
-            "Transaction Context Anomalies": 0.3172908094,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 228.3888432116,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.2759540069,
-            "Time Since Last Transaction": 18.3194934798,
-            "Social Trust Score": 79.8383099201,
-            "Account Age": 1.3280230586,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.1389393437,
-            "Transaction Context Anomalies": 0.5646156043,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0481023865,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.0919726784,
-            "Time Since Last Transaction": 0.6106985606,
-            "Social Trust Score": 0.7984573622,
-            "Account Age": 0.2655017534,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1102495881,
-            "Transaction Context Anomalies": 0.1412388997,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1380.9032264596,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.7702011912,
-            "Time Since Last Transaction": 1.4306774362,
-            "Social Trust Score": 26.6106957505,
-            "Account Age": 3.6867207049,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5375523798,
-            "Transaction Context Anomalies": 0.2715615956,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2908467502,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5900616504,
-            "Time Since Last Transaction": 0.0476879014,
-            "Social Trust Score": 0.266046857,
-            "Account Age": 0.7374051068,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4275140524,
-            "Transaction Context Anomalies": 0.0679189333,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1115.4031145987,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.6401524292,
-            "Time Since Last Transaction": 5.0758220115,
-            "Social Trust Score": 42.8967652013,
-            "Account Age": 2.6901602708,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2352033241,
-            "Transaction Context Anomalies": 0.1965074011,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2349267056,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2133737556,
-            "Time Since Last Transaction": 0.169203539,
-            "Social Trust Score": 0.4289486627,
-            "Account Age": 0.5380238035,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1868681062,
-            "Transaction Context Anomalies": 0.0491409236,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 958.0022945562,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7251309804,
-            "Time Since Last Transaction": 19.2159387967,
-            "Social Trust Score": 70.3709984506,
-            "Account Age": 4.1677806701,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.688033049,
-            "Transaction Context Anomalies": 0.2314006268,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2017747012,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2417003134,
-            "Time Since Last Transaction": 0.6405827318,
-            "Social Trust Score": 0.703760349,
-            "Account Age": 0.833650512,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5472847688,
-            "Transaction Context Anomalies": 0.0578709531,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 301.6515022959,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.8597491322,
-            "Time Since Last Transaction": 17.312872107,
-            "Social Trust Score": 1.2081691828,
-            "Account Age": 3.1274001126,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 1.1666297644,
-            "Transaction Context Anomalies": 1.7790018327,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0635330812,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.6199113583,
-            "Time Since Last Transaction": 0.5771415273,
-            "Social Trust Score": 0.0119574672,
-            "Account Age": 0.6255021405,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.9282099187,
-            "Transaction Context Anomalies": 0.4450694385,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1052.7544214852,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 2.6339518313,
-            "Time Since Last Transaction": 19.9092254955,
-            "Social Trust Score": 5.0637475025,
-            "Account Age": 4.9809126478,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5192631787,
-            "Transaction Context Anomalies": 0.4246183528,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2217315409,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.8779823325,
-            "Time Since Last Transaction": 0.663694346,
-            "Social Trust Score": 0.0505229831,
-            "Account Age": 0.9963333839,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4129572941,
-            "Transaction Context Anomalies": 0.1062126128,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2338.6321037072,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1172910719,
-            "Time Since Last Transaction": 13.5231993574,
-            "Social Trust Score": 37.3968753755,
-            "Account Age": 2.5895429664,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6032951851,
-            "Transaction Context Anomalies": 0.5144367213,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4925650891,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.039084335,
-            "Time Since Last Transaction": 0.4508078549,
-            "Social Trust Score": 0.373935881,
-            "Account Age": 0.5178933542,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4798401281,
-            "Transaction Context Anomalies": 0.1286845107,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 187.9794204415,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.2943769265,
-            "Time Since Last Transaction": 25.3557373789,
-            "Social Trust Score": 23.6943528222,
-            "Account Age": 4.5531943606,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3089614092,
-            "Transaction Context Anomalies": 0.2461671591,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0395912913,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4314514678,
-            "Time Since Last Transaction": 0.8452609069,
-            "Social Trust Score": 0.2368760659,
-            "Account Age": 0.9107600192,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2455737111,
-            "Transaction Context Anomalies": 0.0615654313,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 620.8750959473,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.324788566,
-            "Time Since Last Transaction": 13.5902103491,
-            "Social Trust Score": 60.948858825,
-            "Account Age": 2.3197540907,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3212367914,
-            "Transaction Context Anomalies": 0.4701704715,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1307684487,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1082510797,
-            "Time Since Last Transaction": 0.4530417535,
-            "Social Trust Score": 0.6095151682,
-            "Account Age": 0.4639168408,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2553439449,
-            "Transaction Context Anomalies": 0.1176094192,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 301.9272975124,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.9724441148,
-            "Time Since Last Transaction": 24.2023463771,
-            "Social Trust Score": 16.0619039738,
-            "Account Age": 4.1494777696,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5704700128,
-            "Transaction Context Anomalies": 1.1479668572,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0635911696,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3241391135,
-            "Time Since Last Transaction": 0.806811117,
-            "Social Trust Score": 0.1605323107,
-            "Account Age": 0.8299886607,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4537138859,
-            "Transaction Context Anomalies": 0.28718911,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 842.6873903771,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.5873327339,
-            "Time Since Last Transaction": 10.7931476658,
-            "Social Trust Score": 15.7430563265,
-            "Account Age": 0.0334520894,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7357103048,
-            "Transaction Context Anomalies": 0.0076371592,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1774868975,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5291046931,
-            "Time Since Last Transaction": 0.3597980293,
-            "Social Trust Score": 0.1573430293,
-            "Account Age": 0.0064976447,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5852320953,
-            "Transaction Context Anomalies": 0.0018869726,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1549.322449529,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.0434675736,
-            "Time Since Last Transaction": 29.5636602374,
-            "Social Trust Score": 57.9476824026,
-            "Account Age": 3.1861074338,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.617638707,
-            "Transaction Context Anomalies": 1.990929246,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3263194677,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0144761772,
-            "Time Since Last Transaction": 0.9855374909,
-            "Social Trust Score": 0.5794958281,
-            "Account Age": 0.6372476823,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4912564376,
-            "Transaction Context Anomalies": 0.4980921249,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1865.1387922679,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.6450910165,
-            "Time Since Last Transaction": 4.70761797,
-            "Social Trust Score": 77.2134470992,
-            "Account Age": 4.1022521998,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5964505799,
-            "Transaction Context Anomalies": 3.3544951317,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3928371948,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.2150199731,
-            "Time Since Last Transaction": 0.1569289781,
-            "Social Trust Score": 0.772202108,
-            "Account Age": 0.8205402667,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4743923635,
-            "Transaction Context Anomalies": 0.8392463212,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 757.2548658251,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7868032518,
-            "Time Since Last Transaction": 3.8470417984,
-            "Social Trust Score": 1.9644033377,
-            "Account Age": 0.7991862034,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.440339678,
-            "Transaction Context Anomalies": 0.8047465439,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.159492967,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2622580086,
-            "Time Since Last Transaction": 0.1282405516,
-            "Social Trust Score": 0.0195217177,
-            "Account Age": 0.1596976518,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.3501404269,
-            "Transaction Context Anomalies": 0.2013179017,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 948.9563763754,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.5439938665,
-            "Time Since Last Transaction": 6.2428157925,
-            "Social Trust Score": 71.2285637998,
-            "Account Age": 3.389309171,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2876557695,
-            "Transaction Context Anomalies": 0.4992372401,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1998694359,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1813204781,
-            "Time Since Last Transaction": 0.2081067952,
-            "Social Trust Score": 0.7123381672,
-            "Account Age": 0.6779021432,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2286161062,
-            "Transaction Context Anomalies": 0.1248817118,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1048.1538129752,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "unusual",
-            "Behavioral Biometrics": 1.3250049136,
-            "Time Since Last Transaction": 20.1467724924,
-            "Social Trust Score": 5.93618614,
-            "Account Age": 2.7189300487,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5030435565,
-            "Transaction Context Anomalies": 1.2633315333,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2207625536,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4416609316,
-            "Time Since Last Transaction": 0.6716132842,
-            "Social Trust Score": 0.0592495718,
-            "Account Age": 0.5437797573,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4000477571,
-            "Transaction Context Anomalies": 0.3160525069,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 1
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 594.7361343779,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.9855858722,
-            "Time Since Last Transaction": 8.0181823755,
-            "Social Trust Score": 65.7929394089,
-            "Account Age": 3.2105610411,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3639903026,
-            "Transaction Context Anomalies": 1.639640414,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1252630201,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3285197571,
-            "Time Since Last Transaction": 0.2672909505,
-            "Social Trust Score": 0.6579682021,
-            "Account Age": 0.6421401022,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2893723599,
-            "Transaction Context Anomalies": 0.4102022323,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 37.8792088019,
-            "Transaction Frequency": 0,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.5679113362,
-            "Time Since Last Transaction": 8.6921691336,
-            "Social Trust Score": 87.5128382825,
-            "Account Age": 0.1654474727,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6986908725,
-            "Transaction Context Anomalies": 0.631338942,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0079769523,
-            "Transaction Frequency": 0.0,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.1892930732,
-            "Time Since Last Transaction": 0.2897591761,
-            "Social Trust Score": 0.8752220188,
-            "Account Age": 0.0329058891,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5557675537,
-            "Transaction Context Anomalies": 0.15793259,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 307.5810804585,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.5144601929,
-            "Time Since Last Transaction": 25.6797751812,
-            "Social Trust Score": 52.3051860209,
-            "Account Age": 2.7864713836,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7537024884,
-            "Transaction Context Anomalies": 0.8881194921,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0647819781,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1714757902,
-            "Time Since Last Transaction": 0.8560631287,
-            "Social Trust Score": 0.5230566208,
-            "Account Age": 0.5572927154,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5995524511,
-            "Transaction Context Anomalies": 0.2221772027,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 246.7236648458,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1040270843,
-            "Time Since Last Transaction": 13.2783953471,
-            "Social Trust Score": 96.0894578387,
-            "Account Age": 2.2197709381,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3373364226,
-            "Transaction Context Anomalies": 1.1022123487,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.051964095,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.0346629474,
-            "Time Since Last Transaction": 0.4426469947,
-            "Social Trust Score": 0.9610098645,
-            "Account Age": 0.4439132659,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2681579786,
-            "Transaction Context Anomalies": 0.2757416671,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2233.7777661253,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.6562547695,
-            "Time Since Last Transaction": 5.1153960142,
-            "Social Trust Score": 7.9458486675,
-            "Account Age": 1.0078519976,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6057327902,
-            "Transaction Context Anomalies": 1.9561591254,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4704805062,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2187412732,
-            "Time Since Last Transaction": 0.1705227899,
-            "Social Trust Score": 0.0793512701,
-            "Account Age": 0.2014453036,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.481780269,
-            "Transaction Context Anomalies": 0.4893928954,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1538.781206394,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.301279093,
-            "Time Since Last Transaction": 14.6285735508,
-            "Social Trust Score": 10.4045435637,
-            "Account Age": 0.1495566792,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6764779225,
-            "Transaction Context Anomalies": 2.5350096511,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3240992548,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4337522203,
-            "Time Since Last Transaction": 0.487656942,
-            "Social Trust Score": 0.1039444256,
-            "Account Age": 0.0297266267,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5380878016,
-            "Transaction Context Anomalies": 0.6342170568,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 371.9420387368,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "unusual",
-            "Behavioral Biometrics": 0.1926260551,
-            "Time Since Last Transaction": 10.9451243675,
-            "Social Trust Score": 85.2653549849,
-            "Account Age": 1.9674485947,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3260002826,
-            "Transaction Context Anomalies": 0.3382231672,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0783377828,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0641963276,
-            "Time Since Last Transaction": 0.3648643704,
-            "Social Trust Score": 0.8527415124,
-            "Account Age": 0.3934312721,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2591353073,
-            "Transaction Context Anomalies": 0.0845971702,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 1
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1031.28547004,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 2.6111048908,
-            "Time Since Last Transaction": 15.9066347112,
-            "Social Trust Score": 87.9727178382,
-            "Account Age": 2.3350175501,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.0208123777,
-            "Transaction Context Anomalies": 1.3785952256,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2172097171,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.8703665851,
-            "Time Since Last Transaction": 0.5302627739,
-            "Social Trust Score": 0.8798219752,
-            "Account Age": 0.4669705928,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.0162298617,
-            "Transaction Context Anomalies": 0.3448906384,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1986.5817339872,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.9139739045,
-            "Time Since Last Transaction": 3.3888359736,
-            "Social Trust Score": 69.0593065792,
-            "Account Age": 1.7642701989,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5155498713,
-            "Transaction Context Anomalies": 0.7799752396,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4184156952,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.304648786,
-            "Time Since Last Transaction": 0.1129656642,
-            "Social Trust Score": 0.6906401191,
-            "Account Age": 0.3527814811,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.410001795,
-            "Transaction Context Anomalies": 0.1951203029,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 328.345282347,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7496446425,
-            "Time Since Last Transaction": 17.2951199811,
-            "Social Trust Score": 74.788695868,
-            "Account Age": 1.5687978035,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6114501894,
-            "Transaction Context Anomalies": 1.7910368579,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0691553664,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.249871642,
-            "Time Since Last Transaction": 0.5765497371,
-            "Social Trust Score": 0.7479484748,
-            "Account Age": 0.3136734254,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4863308668,
-            "Transaction Context Anomalies": 0.4480805136,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 25.3559089386,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.2599054826,
-            "Time Since Last Transaction": 12.7159491886,
-            "Social Trust Score": 4.5265833866,
-            "Account Age": 0.6975875512,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.6586130423,
-            "Transaction Context Anomalies": 1.1732877332,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0053392755,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0866230996,
-            "Time Since Last Transaction": 0.4238971201,
-            "Social Trust Score": 0.045149986,
-            "Account Age": 0.1393708648,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.5238687693,
-            "Transaction Context Anomalies": 0.2935242077,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1505.3692855948,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.490654326,
-            "Time Since Last Transaction": 15.8663109496,
-            "Social Trust Score": 92.8370939919,
-            "Account Age": 0.0194674348,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4387531721,
-            "Transaction Context Anomalies": 0.1511548702,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3170619843,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4968781316,
-            "Time Since Last Transaction": 0.5289185288,
-            "Social Trust Score": 0.928478016,
-            "Account Age": 0.0036997424,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3488776936,
-            "Transaction Context Anomalies": 0.0377940526,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 520.1072609199,
-            "Transaction Frequency": 0,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.3927439572,
-            "Time Since Last Transaction": 13.8254624545,
-            "Social Trust Score": 71.5053737005,
-            "Account Age": 4.1697096285,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.5439323785,
-            "Transaction Context Anomalies": 0.9171075114,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1095445713,
-            "Transaction Frequency": 0.0,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1309031759,
-            "Time Since Last Transaction": 0.4608841886,
-            "Social Trust Score": 0.715106965,
-            "Account Age": 0.8340364377,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.432592027,
-            "Transaction Context Anomalies": 0.2294297928,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1172.1292902851,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.9333375765,
-            "Time Since Last Transaction": 4.8686381777,
-            "Social Trust Score": 65.6638467307,
-            "Account Age": 2.1129011435,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.0921284271,
-            "Transaction Context Anomalies": 0.8744755003,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2468744606,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3111034286,
-            "Time Since Last Transaction": 0.1622967963,
-            "Social Trust Score": 0.6566769494,
-            "Account Age": 0.4225318843,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.072991799,
-            "Transaction Context Anomalies": 0.2187635759,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1240.0839716679,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.2061351218,
-            "Time Since Last Transaction": 13.8656041151,
-            "Social Trust Score": 73.4709948167,
-            "Account Age": 0.0685570661,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.371523166,
-            "Transaction Context Anomalies": 0.0393975267,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2611871808,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0686994093,
-            "Time Since Last Transaction": 0.4622223631,
-            "Social Trust Score": 0.734768138,
-            "Account Age": 0.0135210782,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2953679237,
-            "Transaction Context Anomalies": 0.0098331839,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 963.2606073253,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.3841645004,
-            "Time Since Last Transaction": 12.1062332968,
-            "Social Trust Score": 4.3424318709,
-            "Account Age": 4.5801118363,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6030517688,
-            "Transaction Context Anomalies": 1.1687604015,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2028822152,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1280433192,
-            "Time Since Last Transaction": 0.4035714475,
-            "Social Trust Score": 0.0433080059,
-            "Account Age": 0.9161453839,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.479646388,
-            "Transaction Context Anomalies": 0.2923915025,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 139.8538445012,
-            "Transaction Frequency": 6,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.6164638399,
-            "Time Since Last Transaction": 29.2948380876,
-            "Social Trust Score": 4.1369273938,
-            "Account Age": 2.9366314138,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6228813856,
-            "Transaction Context Anomalies": 1.5120669006,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.029455008,
-            "Transaction Frequency": 0.4615384615,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.53881519,
-            "Time Since Last Transaction": 0.9765759547,
-            "Social Trust Score": 0.0412524424,
-            "Account Age": 0.5873351509,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4954291953,
-            "Transaction Context Anomalies": 0.3782842738,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 285.1073449416,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.9957098081,
-            "Time Since Last Transaction": 11.717960106,
-            "Social Trust Score": 91.6340858398,
-            "Account Age": 4.3831114075,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7043327406,
-            "Transaction Context Anomalies": 0.838267458,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0600485251,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.3318944469,
-            "Time Since Last Transaction": 0.3906278554,
-            "Social Trust Score": 0.9164448977,
-            "Account Age": 0.8767316154,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5602580347,
-            "Transaction Context Anomalies": 0.2097045889,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1486.8438967535,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.91140657,
-            "Time Since Last Transaction": 0.836334997,
-            "Social Trust Score": 8.5450905942,
-            "Account Age": 3.9608475423,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.6138436424,
-            "Transaction Context Anomalies": 0.7585188133,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3131601382,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3037929965,
-            "Time Since Last Transaction": 0.0278747228,
-            "Social Trust Score": 0.085345202,
-            "Account Age": 0.7922495139,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.4882358662,
-            "Transaction Context Anomalies": 0.1897520622,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 104.2350216499,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.654459785,
-            "Time Since Last Transaction": 4.7656602993,
-            "Social Trust Score": 24.1879146639,
-            "Account Age": 0.3687568737,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7651924756,
-            "Transaction Context Anomalies": 1.6489375227,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0219529164,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.5514806722,
-            "Time Since Last Transaction": 0.1588638947,
-            "Social Trust Score": 0.2418129302,
-            "Account Age": 0.0735818902,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.6086975725,
-            "Transaction Context Anomalies": 0.4125283008,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 427.4121388629,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.3434309117,
-            "Time Since Last Transaction": 20.2203508049,
-            "Social Trust Score": 24.9210169622,
-            "Account Age": 3.8575535644,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7034188411,
-            "Transaction Context Anomalies": 1.977201498,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0900209811,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.114465277,
-            "Time Since Last Transaction": 0.674066113,
-            "Social Trust Score": 0.2491458038,
-            "Account Age": 0.771583544,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.559530643,
-            "Transaction Context Anomalies": 0.4946575429,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1329.5213383796,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.7930681222,
-            "Time Since Last Transaction": 27.8624017389,
-            "Social Trust Score": 46.4240446001,
-            "Account Age": 1.3039837374,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2130426829,
-            "Transaction Context Anomalies": 2.0844202388,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2800246174,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5976840614,
-            "Time Since Last Transaction": 0.9288238251,
-            "Social Trust Score": 0.4642303607,
-            "Account Age": 0.2606922195,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1692299878,
-            "Transaction Context Anomalies": 0.5214828864,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 672.4062866324,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.2812797437,
-            "Time Since Last Transaction": 4.3656591381,
-            "Social Trust Score": 7.080392906,
-            "Account Age": 1.5005767103,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4161530798,
-            "Transaction Context Anomalies": 0.9069435617,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1416220278,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0937479474,
-            "Time Since Last Transaction": 0.1455293355,
-            "Social Trust Score": 0.0706945278,
-            "Account Age": 0.3000244685,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3308898068,
-            "Transaction Context Anomalies": 0.226886847,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 792.2529882046,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.3847655414,
-            "Time Since Last Transaction": 0.0920356286,
-            "Social Trust Score": 67.7210887143,
-            "Account Age": 3.198533267,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3238850554,
-            "Transaction Context Anomalies": 0.5066984319,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1668643257,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.4615814039,
-            "Time Since Last Transaction": 0.0030625348,
-            "Social Trust Score": 0.6772545624,
-            "Account Age": 0.639733712,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2574517537,
-            "Transaction Context Anomalies": 0.1267484474,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2422.7070263269,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.0244588239,
-            "Time Since Last Transaction": 0.8022058232,
-            "Social Trust Score": 27.5999438954,
-            "Account Age": 0.0034134753,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5695840293,
-            "Transaction Context Anomalies": 0.2612852524,
-            "Fraud Complaints Count": 3,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.5102730795,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.0081398437,
-            "Time Since Last Transaction": 0.0267369823,
-            "Social Trust Score": 0.2759418356,
-            "Account Age": 0.0004878355,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4530087131,
-            "Transaction Context Anomalies": 0.0653478675,
-            "Fraud Complaints Count": 0.6,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1744.5298320634,
-            "Transaction Frequency": 6,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.3400053027,
-            "Time Since Last Transaction": 14.0350702828,
-            "Social Trust Score": 62.6938421367,
-            "Account Age": 0.0742714019,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6119473619,
-            "Transaction Context Anomalies": 2.7531988867,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3674343489,
-            "Transaction Frequency": 0.4615384615,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1133233922,
-            "Time Since Last Transaction": 0.4678717383,
-            "Social Trust Score": 0.6269694062,
-            "Account Age": 0.0146643423,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4867265768,
-            "Transaction Context Anomalies": 0.6888064052,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1788.7312013986,
-            "Transaction Frequency": 0,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4706354329,
-            "Time Since Last Transaction": 11.222051695,
-            "Social Trust Score": 68.2538928686,
-            "Account Age": 1.832320565,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.820059467,
-            "Transaction Context Anomalies": 1.9886206968,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3767441097,
-            "Transaction Frequency": 0.0,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.156867344,
-            "Time Since Last Transaction": 0.3740961032,
-            "Social Trust Score": 0.6825839489,
-            "Account Age": 0.3663962808,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.6523673601,
-            "Transaction Context Anomalies": 0.4975145428,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 622.7086444493,
-            "Transaction Frequency": 7,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.7468122502,
-            "Time Since Last Transaction": 8.1961190569,
-            "Social Trust Score": 94.5881532579,
-            "Account Age": 0.3709071929,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5678228646,
-            "Transaction Context Anomalies": 0.06335407,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1311546335,
-            "Transaction Frequency": 0.5384615385,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2489274987,
-            "Time Since Last Transaction": 0.2732227013,
-            "Social Trust Score": 0.9459930289,
-            "Account Age": 0.0740121034,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4516069652,
-            "Transaction Context Anomalies": 0.0158269356,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 3359.7820807619,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.8987769366,
-            "Time Since Last Transaction": 22.1848108591,
-            "Social Trust Score": 78.1243848215,
-            "Account Age": 2.2412964399,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.3377514224,
-            "Transaction Context Anomalies": 1.5668940664,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.7076412782,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2995830631,
-            "Time Since Last Transaction": 0.7395539452,
-            "Social Trust Score": 0.7813137847,
-            "Account Age": 0.4482198614,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.2684882856,
-            "Transaction Context Anomalies": 0.392001629,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 555.8684917512,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.1831287438,
-            "Time Since Last Transaction": 11.8858175212,
-            "Social Trust Score": 96.7573806118,
-            "Account Age": 4.027811259,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.1447798464,
-            "Transaction Context Anomalies": 0.0633228997,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1170766571,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3943682505,
-            "Time Since Last Transaction": 0.3962236008,
-            "Social Trust Score": 0.9676907783,
-            "Account Age": 0.8056469082,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1148981665,
-            "Transaction Context Anomalies": 0.015819137,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 864.7144627595,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.0227843058,
-            "Time Since Last Transaction": 16.1241700281,
-            "Social Trust Score": 15.7458114676,
-            "Account Age": 4.3587154907,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6264661817,
-            "Transaction Context Anomalies": 0.246153541,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1821262736,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0075816636,
-            "Time Since Last Transaction": 0.5375145967,
-            "Social Trust Score": 0.1573705877,
-            "Account Age": 0.8718507376,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4982824096,
-            "Transaction Context Anomalies": 0.0615620242,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 137.4308156472,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.5076150059,
-            "Time Since Last Transaction": 11.7246327659,
-            "Social Trust Score": 36.346151012,
-            "Account Age": 0.5804191032,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.3721226428,
-            "Transaction Context Anomalies": 0.7071337921,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0289446659,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.5025317662,
-            "Time Since Last Transaction": 0.3908502972,
-            "Social Trust Score": 0.363425985,
-            "Account Age": 0.1159290372,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2958450598,
-            "Transaction Context Anomalies": 0.1768959063,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 555.8684917512,
-            "Transaction Frequency": 4,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.1831287438,
-            "Time Since Last Transaction": 11.8858175212,
-            "Social Trust Score": 96.7573806118,
-            "Account Age": 4.027811259,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.1447798464,
-            "Transaction Context Anomalies": 0.0633228997,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1170766571,
-            "Transaction Frequency": 0.3076923077,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3943682505,
-            "Time Since Last Transaction": 0.3962236008,
-            "Social Trust Score": 0.9676907783,
-            "Account Age": 0.8056469082,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1148981665,
-            "Transaction Context Anomalies": 0.015819137,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1788.7312013986,
-            "Transaction Frequency": 0,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.4706354329,
-            "Time Since Last Transaction": 11.222051695,
-            "Social Trust Score": 68.2538928686,
-            "Account Age": 1.832320565,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 1,
-            "Normalized Transaction Amount": 0.820059467,
-            "Transaction Context Anomalies": 1.9886206968,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.3767441097,
-            "Transaction Frequency": 0.0,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.156867344,
-            "Time Since Last Transaction": 0.3740961032,
-            "Social Trust Score": 0.6825839489,
-            "Account Age": 0.3663962808,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 1.0,
-            "Normalized Transaction Amount": 0.6523673601,
-            "Transaction Context Anomalies": 0.4975145428,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 2168.0952420151,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.5974659808,
-            "Time Since Last Transaction": 2.8462164214,
-            "Social Trust Score": 33.4822574206,
-            "Account Age": 0.4279666931,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4192554079,
-            "Transaction Context Anomalies": 0.5335450575,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.4566463513,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1991447515,
-            "Time Since Last Transaction": 0.0948767354,
-            "Social Trust Score": 0.3347798197,
-            "Account Age": 0.0854279665,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3333590147,
-            "Transaction Context Anomalies": 0.1334652764,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1150.0920656467,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 1.0478264058,
-            "Time Since Last Transaction": 16.7187118806,
-            "Social Trust Score": 63.3274137997,
-            "Account Age": 0.2883076979,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2152966361,
-            "Transaction Context Anomalies": 0.6291215348,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2422329462,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3492668756,
-            "Time Since Last Transaction": 0.557334423,
-            "Social Trust Score": 0.6333067222,
-            "Account Age": 0.0574864674,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.1710239564,
-            "Transaction Context Anomalies": 0.1573778109,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 156.8559125831,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.5963470195,
-            "Time Since Last Transaction": 25.00463092,
-            "Social Trust Score": 16.1932742086,
-            "Account Age": 1.1647639476,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4902543448,
-            "Transaction Context Anomalies": 0.4355938417,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0330360099,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1987717595,
-            "Time Since Last Transaction": 0.8335563162,
-            "Social Trust Score": 0.1618463446,
-            "Account Age": 0.2328385919,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3898685556,
-            "Transaction Context Anomalies": 0.1089585998,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1012.1401692618,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 1,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 3.0,
-            "Time Since Last Transaction": 21.9197539938,
-            "Social Trust Score": 75.5765602425,
-            "Account Age": 3.3839264034,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5119156814,
-            "Transaction Context Anomalies": 0.6992938719,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2131773042,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 1.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 1.0,
-            "Time Since Last Transaction": 0.7307179297,
-            "Social Trust Score": 0.7558291074,
-            "Account Age": 0.6768252158,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4071092672,
-            "Transaction Context Anomalies": 0.1749344157,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1358.2436327456,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.1096755571,
-            "Time Since Last Transaction": 7.8044946634,
-            "Social Trust Score": 54.807389912,
-            "Account Age": 0.3368789039,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4012039518,
-            "Transaction Context Anomalies": 0.5922442148,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2860741515,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0365457965,
-            "Time Since Last Transaction": 0.2601673925,
-            "Social Trust Score": 0.5480849761,
-            "Account Age": 0.0672040822,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3189914827,
-            "Transaction Context Anomalies": 0.1481513756,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 613.9972032021,
-            "Transaction Frequency": 1,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "unusual",
-            "Behavioral Biometrics": 0.8328832499,
-            "Time Since Last Transaction": 23.0806559938,
-            "Social Trust Score": 16.2951614086,
-            "Account Age": 4.9091489877,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2556733966,
-            "Transaction Context Anomalies": 1.5485918156,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1293198163,
-            "Transaction Frequency": 0.0769230769,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.2776182108,
-            "Time Since Last Transaction": 0.7694181085,
-            "Social Trust Score": 0.1628654738,
-            "Account Age": 0.9819756675,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2031606657,
-            "Transaction Context Anomalies": 0.38742254,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 1
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 1124.6228535023,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 0.1362921299,
-            "Time Since Last Transaction": 17.2791089444,
-            "Social Trust Score": 12.0218848799,
-            "Account Age": 3.1848580819,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 1,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6677385596,
-            "Transaction Context Anomalies": 1.0896499441,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2368685813,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.0454181046,
-            "Time Since Last Transaction": 0.5760159883,
-            "Social Trust Score": 0.1201219214,
-            "Account Age": 0.6369977252,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 1.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.5311319596,
-            "Transaction Context Anomalies": 0.2725986455,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 641.9310398105,
-            "Transaction Frequency": 2,
-            "Recipient Verification Status": "suspicious",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.1592742388,
-            "Time Since Last Transaction": 24.5979274525,
-            "Social Trust Score": 6.8644586338,
-            "Account Age": 1.1399819232,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.7117746145,
-            "Transaction Context Anomalies": 0.0351146667,
-            "Fraud Complaints Count": 2,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.1352032842,
-            "Transaction Frequency": 0.1538461538,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3864166438,
-            "Time Since Last Transaction": 0.8199983269,
-            "Social Trust Score": 0.06853464,
-            "Account Age": 0.2278804658,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.566181178,
-            "Transaction Context Anomalies": 0.0087616437,
-            "Fraud Complaints Count": 0.4,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 1,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 311.3388075085,
-            "Transaction Frequency": 5,
-            "Recipient Verification Status": "recently_registered",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 0.5915066086,
-            "Time Since Last Transaction": 22.0799665344,
-            "Social Trust Score": 68.505546561,
-            "Account Age": 1.3969506415,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.5427324058,
-            "Transaction Context Anomalies": 0.188934587,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 1,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 0,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0655734364,
-            "Transaction Frequency": 0.3846153846,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.1971582679,
-            "Time Since Last Transaction": 0.7360588232,
-            "Social Trust Score": 0.6851011211,
-            "Account Age": 0.2792920573,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4316369436,
-            "Transaction Context Anomalies": 0.047246261,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 1.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 0.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 0,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 365.939281417,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 1,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.0817178543,
-            "Time Since Last Transaction": 16.6989550059,
-            "Social Trust Score": 78.4075825291,
-            "Account Age": 1.7014099201,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.6232334011,
-            "Transaction Context Anomalies": 0.2706493729,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 1,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0770734727,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 1.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.3605641743,
-            "Time Since Last Transaction": 0.5566758019,
-            "Social Trust Score": 0.7841464767,
-            "Account Age": 0.3402050594,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.4957093718,
-            "Transaction Context Anomalies": 0.0676907019,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 1.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 304.0876309798,
-            "Transaction Frequency": 6,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 0,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.3992303486,
-            "Time Since Last Transaction": 17.0221541497,
-            "Social Trust Score": 23.7626661089,
-            "Account Age": 2.4296834207,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.322812104,
-            "Transaction Context Anomalies": 1.4566219953,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.0640461824,
-            "Transaction Frequency": 0.4615384615,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 0.0,
-            "Behavioral Biometrics": 0.46640307,
-            "Time Since Last Transaction": 0.5674500659,
-            "Social Trust Score": 0.2375593712,
-            "Account Age": 0.485910342,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.2565977691,
-            "Transaction Context Anomalies": 0.3644123646,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 964.7470287573,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "normal",
-            "Behavioral Biometrics": 1.4425114496,
-            "Time Since Last Transaction": 9.9972465952,
-            "Social Trust Score": 40.024734765,
-            "Account Age": 4.9505377215,
-            "High-Risk Transaction Times": 0,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.2324711944,
-            "Transaction Context Anomalies": 0.7179769993,
-            "Fraud Complaints Count": 0,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 0
-        },
-        "model_processed": {
-            "Transaction Amount": 0.2031952876,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.4808302942,
-            "Time Since Last Transaction": 0.3332656315,
-            "Social Trust Score": 0.4002211084,
-            "Account Age": 0.990256289,
-            "High-Risk Transaction Times": 0.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.184693547,
-            "Transaction Context Anomalies": 0.1796087973,
-            "Fraud Complaints Count": 0.0,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 0,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 1,
-            "Geo-Location Flags_unusual": 0
-        }
-    },
-    {
-        "user_friendly": {
-            "Transaction Amount": 4271.6252102024,
-            "Transaction Frequency": 3,
-            "Recipient Verification Status": "verified",
-            "Recipient Blacklist Status": 0,
-            "Device Fingerprinting": 0,
-            "VPN or Proxy Usage": 1,
-            "Geo-Location Flags": "high-risk",
-            "Behavioral Biometrics": 2.4325883077,
-            "Time Since Last Transaction": 2.4423247578,
-            "Social Trust Score": 29.2501731173,
-            "Account Age": 2.6966987337,
-            "High-Risk Transaction Times": 1,
-            "Past Fraudulent Behavior Flags": 0,
-            "Location-Inconsistent Transactions": 0,
-            "Normalized Transaction Amount": 0.4478938005,
-            "Transaction Context Anomalies": 0.1887802429,
-            "Fraud Complaints Count": 1,
-            "Merchant Category Mismatch": 0,
-            "User Daily Limit Exceeded": 0,
-            "Recent High-Value Transaction Flags": 1,
-            "Label": 1
-        },
-        "model_processed": {
-            "Transaction Amount": 0.8996950899,
-            "Transaction Frequency": 0.2307692308,
-            "Recipient Blacklist Status": 0.0,
-            "Device Fingerprinting": 0.0,
-            "VPN or Proxy Usage": 1.0,
-            "Behavioral Biometrics": 0.8108602716,
-            "Time Since Last Transaction": 0.0814124812,
-            "Social Trust Score": 0.2924482935,
-            "Account Age": 0.5393319502,
-            "High-Risk Transaction Times": 1.0,
-            "Past Fraudulent Behavior Flags": 0.0,
-            "Location-Inconsistent Transactions": 0.0,
-            "Normalized Transaction Amount": 0.3561529112,
-            "Transaction Context Anomalies": 0.0472076453,
-            "Fraud Complaints Count": 0.2,
-            "Merchant Category Mismatch": 0.0,
-            "User Daily Limit Exceeded": 0.0,
-            "Recent High-Value Transaction Flags": 1.0,
-            "Label": 1,
-            "Recipient Verification Status_suspicious": 0,
-            "Recipient Verification Status_verified": 1,
-            "Geo-Location Flags_normal": 0,
-            "Geo-Location Flags_unusual": 0
-        }
+  useEffect(() => {
+    if (showPopup) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
     }
-    ]
-    const navigate = useNavigate();
-    const handleSendMoney = () => {
-        
-        if (Number(amount) > balance) {
-          setInsufficientFunds(true);
-          return;
-        }
-        setInsufficientFunds(false);
-
-        
-        const normalizedRecipient = (recipientUpiId || '').trim().toLowerCase();
-        const currentUpi = (userData?.upiId || upiId || '').toLowerCase();
-        if (normalizedRecipient && currentUpi && normalizedRecipient === currentUpi) {
-          setSelfTransferError(true);
-          return;
-        }
-        setSelfTransferError(false);
-
-        setShowSimulation(true);
+    return () => {
+      document.body.style.overflow = 'unset';
     };
-    const getRandomTransaction = () => {
-        const randomIndex = Math.floor(Math.random() * data.length);
-        return data[randomIndex];
-    };
-    const [user, setUser] = useState(null);
-    const [upiId, setUpiId] = useState("");
-    const [recipientUpiId, setRecipientUpiId] = useState('')
-    const [verificationStatus, setVerificationStatus] = useState(null); 
-    const [isAlertOpen, setIsAlertOpen] = useState(false)
-    
-    const [amount, setAmount] = useState(100); 
-    const [insufficientFunds, setInsufficientFunds] = useState(false);
-    
-    
-    const { user: authUser, userData, balance, refreshData } = useAuth();
-    
-    
-    useEffect(() => {
-      if (authUser) {
-        setUser(authUser);
-      }
-      if (userData?.upiId) {
-        setUpiId(userData.upiId);
-      }
-    }, [authUser, userData]);
-    
-  
-    const handleSeeWhy = async () => {
-        try {
-          const usersRef = collection(db, "users");
-          const q = query(usersRef, where("upiId", "==", upiId));
-          const querySnapshot = await getDocs(q);
-    
-          if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            const data = userDoc.data().transactionDetails || {};
-            setTransactionData(Object.entries(data)); 
-          } else {
-            setTransactionData([]);
-          }
-    
-          setShowPopup(true);
-        } catch (error) {
-          console.error("Error fetching transaction data:", error);
-        }
-      };
-    
+  }, [showPopup]);
 
-    const handleVerifyUPI = async () => {
-        
-        const normalizedUpi = (recipientUpiId || "").trim().toLowerCase();
-        if (!normalizedUpi) {
-          setVerificationStatus("invalid");
-          return;
-        }
-      
-        setVerificationStatus("loading");
+  const remarkOptions = [
+    { value: "first_time", label: "First-time Recipient" },
+    { value: "recurring", label: "Recurring Payment" },
+    { value: "urgent", label: "Urgent/Emergency" },
+    { value: "high_value", label: "High-Value Transfer" },
+    { value: "unknown", label: "Unknown Contact" },
+  ];
 
-        try {
-          
-          const usersRef = collection(db, "users");
-      
-          
-          const q = query(usersRef, where("upiId", "==", normalizedUpi));
-          const querySnapshot = await getDocs(q);
-      
-          
-          if (querySnapshot.empty) {
-            setVerificationStatus("invalid");
-            setVerificationTrust(null);
-            return;
-          }
-      
-          
-          const userDoc = querySnapshot.docs[0]; 
-          const modelData = userDoc.data().modelData;
+  // const recentTransactions = [
+  //   { id: 1, name: "Rahul Kumar", upi: "rahul@upi", date: "2 hours ago", avatarInt: "RK" },
+  //   { id: 2, name: "Priya Sharma", upi: "priya@paytm", date: "Yesterday", avatarInt: "PS" },
+  //   { id: 3, name: "Local Grocery", upi: "shop@oksbi", date: "2 days ago", avatarInt: "LG" },
+  // ];
 
-          if (!modelData) {
-            setVerificationStatus("invalid");
-            setVerificationTrust(null);
-            return;
-          }
-      
-          
-          const features = [
-            modelData["Transaction Amount"] || 0,
-            modelData["Transaction Frequency"] || 0,
-            modelData["Recipient Blacklist Status"] || 0,
-            modelData["Device Fingerprinting"] || 0,
-            modelData["VPN or Proxy Usage"] || 0,
-            modelData["Behavioral Biometrics"] || 0,
-            modelData["Time Since Last Transaction"] || 0,
-            modelData["Social Trust Score"] || 0,
-            modelData["Account Age"] || 0,
-            modelData["High-Risk Transaction Times"] || 0,
-            modelData["Past Fraudulent Behavior Flags"] || 0,
-            modelData["Location-Inconsistent Transactions"] || 0,
-            modelData["Normalized Transaction Amount"] || 0,
-            modelData["Transaction Context Anomalies"] || 0,
-            modelData["Fraud Complaints Count"] || 0,
-            modelData["Merchant Category Mismatch"] || 0,
-            modelData["User Daily Limit Exceeded"] || 0,
-            modelData["Recent High-Value Transaction Flags"] || 0,
-            modelData["Recipient Verification Status_suspicious"] || 0,
-            modelData["Recipient Verification Status_verified"] || 0,
-            modelData["Geo-Location Flags_normal"] || 0,
-            modelData["Geo-Location Flags_unusual"] || 0,
-          ];
-      
-          console.debug("Features sent to Flask:", features);
-      
-          
-          const apiBase = import.meta.env.VITE_API_BASE || 'https://rxcq.pythonanywhere.com';
-          const response = await fetch(`${apiBase}/api/predict`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ features }),
-          });
 
-          if (!response.ok) {
-            throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
-          }
-      
-          const result = await response.json();
+  const generateUPIId = (name) => {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const baseName = name.split(" ")[0].toLowerCase();
 
-          if (!result.prediction || result.prediction.length === 0) {
-            throw new Error("Invalid response from backend");
-          }
-      
-          
-          const userFriendly = userDoc.data().transactionDetails || {};
-          const rawTrust = userFriendly["Social Trust Score"] ?? modelData["Social Trust Score"];
-          const trustDisplay = rawTrust == null ? null : (rawTrust > 1 ? Math.round(rawTrust) : Math.round(rawTrust * 100));
-          setVerificationTrust(trustDisplay);
+    return `${baseName}${randomSuffix}@upi`;
+  };
 
-          
-          const recipientProfile = {
-            ...userDoc.data(),
-            params: userDoc.data().transactionDetails || userDoc.data().params || {},
-            modelData: modelData || {}
-          };
-          setRecipientProfileForSimulation(recipientProfile);
+  const navigate = useNavigate();
+  const handleSendMoney = () => {
 
-          
-          const params = recipientProfile.params || {};
-          let vr = 'low';
-          if (params.recipientBlacklistStatus || (params.fraudComplaintsCount || 0) > 0 || (params.pastFraudulentBehavior || 0) > 0 || (trustDisplay != null && trustDisplay < 30)) {
-            vr = 'high';
-          } else if ((trustDisplay != null && trustDisplay < 50) || params.recipientVerificationStatus === 'recently_registered' || (params.accountAge && params.accountAge < 90)) {
-            vr = 'medium';
-          }
-          setVerificationRisk(vr);
+    if (Number(amount) > balance) {
+      setInsufficientFunds(true);
+      return;
+    }
+    setInsufficientFunds(false);
 
-          if (result.prediction[0] === 1) {
-            setVerificationStatus("fraud");
-          } else {
-            setVerificationStatus("valid");
-          }
-        } catch (error) {
-          console.error("Error verifying UPI ID:", error);
-          setVerificationStatus("error");
-        }
-      };
-      
-      
-      
 
-    
-    import('./auth').then(({ handleGoogleSignIn: signInWithGoogle }) => {
-      window.__signInWithGoogle = signInWithGoogle; 
-    }).catch(() => {});
+    const normalizedRecipient = (recipientUpiId || '').trim().toLowerCase();
+    const currentUpi = (userData?.upiId || upiId || '').toLowerCase();
+    if (normalizedRecipient && currentUpi && normalizedRecipient === currentUpi) {
+      setSelfTransferError(true);
+      return;
+    }
+    setSelfTransferError(false);
 
-    const handleGoogleSignIn = async (opts = { useRedirect: false }) => {
+    setShowSimulation(true);
+  };
+  const getRandomTransaction = () => {
+    const randomIndex = Math.floor(Math.random() * data.length);
+    return data[randomIndex];
+  };
+  const [user, setUser] = useState(null);
+  const [upiId, setUpiId] = useState("");
+  const [recipientUpiId, setRecipientUpiId] = useState('')
+  const [verificationStatus, setVerificationStatus] = useState(null);
+  const [isAlertOpen, setIsAlertOpen] = useState(false)
+
+  const [amount, setAmount] = useState(100);
+  const [insufficientFunds, setInsufficientFunds] = useState(false);
+  const [sendStep, setSendStep] = useState('recipient'); // 'recipient' | 'amount'
+  const [showMyQr, setShowMyQr] = useState(false);
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const scanLockRef = useRef(false);
+
+
+  const startScanning = () => {
+    scanLockRef.current = false;
+    setShowScanner(true);
+  };
+
+
+  const { user: authUser, userData, balance, refreshData } = useAuth();
+
+  useEffect(() => {
+    const fetchRecentTransactions = async () => {
+      if (!userData?.upiId) return;
+
       try {
-        const signIn = window.__signInWithGoogle;
-        if (!signIn) {
-          console.warn('Auth helper not loaded yet. Trying direct import...');
-          const mod = await import('./auth');
-          return mod.handleGoogleSignIn(opts);
+        const q = query(
+          collection(db, "transactions"),
+          where("senderUPI", "==", userData.upiId),
+          where("transactionType", "==", "sent")
+        );
+
+        const querySnapshot = await getDocs(q);
+        let transactions = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+
+        // Client-side sort and limit to avoid composite index requirement
+        transactions.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+          return dateB - dateA;
+        });
+
+        transactions = transactions.slice(0, 5);
+
+        // Get unique recipients to fetch their names
+        const uniqueRecipients = [...new Set(transactions.map(t => t.recipientUPI))];
+        const recipientDetails = {};
+
+        // Fetch user details for each unique recipient
+        for (const recipientUPI of uniqueRecipients) {
+          // Skip if we already have a name (e.g. from local cache logic if we had one, but we don't)
+          try {
+            const userQ = query(collection(db, "users"), where("upiId", "==", recipientUPI));
+            const userSnap = await getDocs(userQ);
+            if (!userSnap.empty) {
+              recipientDetails[recipientUPI] = userSnap.docs[0].data().name;
+            }
+          } catch (e) {
+            console.warn("Could not fetch details for", recipientUPI, e);
+          }
         }
 
-        const res = await signIn(opts);
-        if (res?.success) {
-          setUser(res.user);
-          setUpiId(res.upiId);
-        } else if (res?.fallbackToRedirect) {
-          
-          await signIn({ useRedirect: true });
-        } else if (res?.error) {
-          console.error('Sign in failed:', res.error);
-        }
+        const formatted = transactions.map(t => {
+          const name = recipientDetails[t.recipientUPI] || t.recipientUPI;
+          const date = t.createdAt?.toDate ? t.createdAt.toDate() : new Date();
 
-        return res;
+          const now = new Date();
+          const isToday = date.getDate() === now.getDate() &&
+            date.getMonth() === now.getMonth() &&
+            date.getFullYear() === now.getFullYear();
+
+          const yesterday = new Date(now);
+          yesterday.setDate(yesterday.getDate() - 1);
+          const isYesterday = date.getDate() === yesterday.getDate() &&
+            date.getMonth() === yesterday.getMonth() &&
+            date.getFullYear() === yesterday.getFullYear();
+
+          let dateStr = "";
+          if (isToday) {
+            const diffMs = now - date;
+            const diffMins = Math.round(diffMs / 60000);
+            const diffHours = Math.round(diffMs / 3600000);
+            if (diffMins < 60) dateStr = `${diffMins}m ago`;
+            else dateStr = `${diffHours}h ago`;
+          } else if (isYesterday) {
+            dateStr = "Yesterday";
+          } else {
+            dateStr = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+          }
+
+          // Initials
+          const initials = name.split(' ').map(n => n.slice(0, 1)).join('').slice(0, 2).toUpperCase();
+
+          return {
+            id: t.id,
+            name: name,
+            upi: t.recipientUPI,
+            date: dateStr,
+            avatarInt: initials
+          };
+        });
+
+        // Deduplicate by UPI ID, keeping most recent
+        const seen = new Set();
+        const uniqueRecents = formatted.filter(item => {
+          if (seen.has(item.upi)) return false;
+          seen.add(item.upi);
+          return true;
+        });
+
+        setRecentTransactions(uniqueRecents.slice(0, 3));
+
       } catch (error) {
-        console.error('Google Sign-In Error:', error);
+        console.error("Error fetching recent transactions:", error);
       }
     };
 
+    fetchRecentTransactions();
+  }, [userData?.upiId]);
 
 
-    useEffect(() => {
-        
-        (async () => {
+  useEffect(() => {
+    if (authUser) {
+      setUser(authUser);
+    }
+    if (userData?.upiId) {
+      setUpiId(userData.upiId);
+    }
+  }, [authUser, userData]);
+
+
+  const handleSeeWhy = async () => {
+    try {
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("upiId", "==", upiId));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const data = userDoc.data().transactionDetails || {};
+        setTransactionData(Object.entries(data));
+      } else {
+        setTransactionData([]);
+      }
+
+      setShowPopup(true);
+    } catch (error) {
+      console.error("Error fetching transaction data:", error);
+    }
+  };
+
+
+  const handleVerifyUPI = async (overrideUpi) => {
+
+    const normalizedUpi = (overrideUpi && typeof overrideUpi === 'string' ? overrideUpi : recipientUpiId || "").trim().toLowerCase();
+    if (!normalizedUpi) {
+      setVerificationStatus("invalid");
+      return;
+    }
+
+    setVerificationStatus("loading");
+
+    try {
+
+      const usersRef = collection(db, "users");
+
+
+      const q = query(usersRef, where("upiId", "==", normalizedUpi));
+      const querySnapshot = await getDocs(q);
+
+
+      if (querySnapshot.empty) {
+        setVerificationStatus("invalid");
+        setVerificationTrust(null);
+        return;
+      }
+
+
+      const userDoc = querySnapshot.docs[0];
+      const modelData = userDoc.data().modelData;
+
+      if (!modelData) {
+        setVerificationStatus("invalid");
+        setVerificationTrust(null);
+        return;
+      }
+
+
+      const features = [
+        modelData["Transaction Amount"] || 0,
+        modelData["Transaction Frequency"] || 0,
+        modelData["Recipient Blacklist Status"] || 0,
+        modelData["Device Fingerprinting"] || 0,
+        modelData["VPN or Proxy Usage"] || 0,
+        modelData["Behavioral Biometrics"] || 0,
+        modelData["Time Since Last Transaction"] || 0,
+        modelData["Social Trust Score"] || 0,
+        modelData["Account Age"] || 0,
+        modelData["High-Risk Transaction Times"] || 0,
+        modelData["Past Fraudulent Behavior Flags"] || 0,
+        modelData["Location-Inconsistent Transactions"] || 0,
+        modelData["Normalized Transaction Amount"] || 0,
+        modelData["Transaction Context Anomalies"] || 0,
+        modelData["Fraud Complaints Count"] || 0,
+        modelData["Merchant Category Mismatch"] || 0,
+        modelData["User Daily Limit Exceeded"] || 0,
+        modelData["Recent High-Value Transaction Flags"] || 0,
+        modelData["Recipient Verification Status_suspicious"] || 0,
+        modelData["Recipient Verification Status_verified"] || 0,
+        modelData["Geo-Location Flags_normal"] || 0,
+        modelData["Geo-Location Flags_unusual"] || 0,
+      ];
+
+      console.debug("Features sent to Flask:", features);
+
+
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://rxcq.pythonanywhere.com';
+      const response = await fetch(`${apiBase}/api/predict`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ features }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.prediction || result.prediction.length === 0) {
+        throw new Error("Invalid response from backend");
+      }
+
+
+      const userFriendly = userDoc.data().transactionDetails || {};
+      const rawTrust = userFriendly["Social Trust Score"] ?? modelData["Social Trust Score"];
+      const trustDisplay = rawTrust == null ? null : (rawTrust > 1 ? Math.round(rawTrust) : Math.round(rawTrust * 100));
+      setVerificationTrust(trustDisplay);
+
+
+      const recipientProfile = {
+        ...userDoc.data(),
+        params: userDoc.data().transactionDetails || userDoc.data().params || {},
+        modelData: modelData || {}
+      };
+      setRecipientProfileForSimulation(recipientProfile);
+
+
+      const params = recipientProfile.params || {};
+      let vr = 'low';
+      if (params.recipientBlacklistStatus || (params.fraudComplaintsCount || 0) > 0 || (params.pastFraudulentBehavior || 0) > 0 || (trustDisplay != null && trustDisplay < 30)) {
+        vr = 'high';
+      } else if ((trustDisplay != null && trustDisplay < 50) || params.recipientVerificationStatus === 'recently_registered' || (params.accountAge && params.accountAge < 90)) {
+        vr = 'medium';
+      }
+      setVerificationRisk(vr);
+
+      if (result.prediction[0] === 1) {
+        setVerificationStatus("fraud");
+      } else {
+        setVerificationStatus("valid");
+      }
+    } catch (error) {
+      console.error("Error verifying UPI ID:", error);
+      setVerificationStatus("error");
+    }
+  };
+
+  const handleScanResult = async (result, error) => {
+    if (result && !scanLockRef.current) {
+      scanLockRef.current = true; // Lock immediately
+      const text = result?.text || result;
+      if (text) {
+        setShowScanner(false);
+        // If email, try to find associated UPI
+        if (text.includes('@') && !text.includes('@upi')) {
           try {
-            const { handleRedirectResult } = await import('./auth');
-            await handleRedirectResult();
+            // We need to query by email
+            // Note: This relies on email being queryable
+            const q = query(collection(db, 'users'), where('email', '==', text));
+            const snap = await getDocs(q);
+            if (!snap.empty) {
+              const u = snap.docs[0].data();
+              if (u.upiId) {
+                setRecipientUpiId(u.upiId);
+                handleVerifyUPI(u.upiId);
+              } else {
+                console.warn("User found but no UPI ID");
+                setRecipientUpiId(text); // Fallback
+              }
+            } else {
+              setRecipientUpiId(text);
+            }
           } catch (e) {
-            console.warn('Redirect handling:', e);
+            console.error("QR Email lookup failed", e);
+            setRecipientUpiId(text);
           }
-        })();
-    }, []);
+        } else {
+          // Assume valid UPI ID
+          setRecipientUpiId(text);
+          handleVerifyUPI(text);
+        }
+      }
+    }
+  };
 
-    return (
+
+
+
+
+  import('./auth').then(({ handleGoogleSignIn: signInWithGoogle }) => {
+    window.__signInWithGoogle = signInWithGoogle;
+  }).catch(() => { });
+
+  const handleGoogleSignIn = async (opts = { useRedirect: false }) => {
+    try {
+      const signIn = window.__signInWithGoogle;
+      if (!signIn) {
+        console.warn('Auth helper not loaded yet. Trying direct import...');
+        const mod = await import('./auth');
+        return mod.handleGoogleSignIn(opts);
+      }
+
+      const res = await signIn(opts);
+      if (res?.success) {
+        setUser(res.user);
+        setUpiId(res.upiId);
+      } else if (res?.fallbackToRedirect) {
+
+        await signIn({ useRedirect: true });
+      } else if (res?.error) {
+        console.error('Sign in failed:', res.error);
+      }
+
+      return res;
+    } catch (error) {
+      console.error('Google Sign-In Error:', error);
+    }
+  };
+
+
+
+  useEffect(() => {
+
+    (async () => {
+      try {
+        const { handleRedirectResult } = await import('./auth');
+        await handleRedirectResult();
+      } catch (e) {
+        console.warn('Redirect handling:', e);
+      }
+    })();
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100"
+    >
+      {!user ? (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100"
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="flex flex-col items-center justify-center min-h-screen px-4"
         >
-          {!user ? (
-            <motion.div
-              initial={{ y: -20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2 }}
-              className="flex flex-col items-center justify-center min-h-screen px-4"
-            >
-              {/* Background decoration */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-100 rounded-full opacity-60 blur-3xl" />
-                <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-100 rounded-full opacity-60 blur-3xl" />
-              </div>
-              
-              <div className="relative z-10 text-center">
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-2xl shadow-blue-500/30 mb-6">
-                  <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">Fraudulent AI</h1>
-                <p className="text-lg text-slate-500 mb-8 max-w-md">ML-powered UPI fraud detection platform with real-time risk analysis</p>
-                <Button
-                  onClick={handleGoogleSignIn}
-                  className="px-8 py-4 h-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300"
-                >
-                  Get Started
-                </Button>
-              </div>
-            </motion.div>
-          ) : (
-            <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-              {/* Desktop Sidebar */}
-              <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
-                <SidebarContent />
-              </aside>
-    
-              <main className="flex-1 flex flex-col min-w-0">
-                {/* Mobile Navigation */}
-                <MobileNav />
-    
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5">
-                  {/* Page Title */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h1 className="text-2xl font-bold text-slate-800">Simulate Transaction</h1>
-                      <p className="text-slate-500 text-sm mt-0.5">Test fraud detection with ML-powered risk analysis</p>
-                    </div>
-                    
-                  </div>
+          {/* Background decoration */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-100 rounded-full opacity-60 blur-3xl" />
+            <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-100 rounded-full opacity-60 blur-3xl" />
+          </div>
 
-                  <div className="grid gap-5 lg:grid-cols-3">
-                    {/* Main Send Form - Takes 2 columns */}
-                    <div className="lg:col-span-2 space-y-5">
-                      {/* Transfer Form */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                      >
-                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
-                          <CardContent className="p-5 space-y-5">
-                            {/* Recipient UPI */}
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                                <User className="h-4 w-4 text-blue-500" />
-                                Recipient UPI ID
-                              </label>
-                              <div className="flex gap-2">
-                                <div className="relative flex-grow">
-                                  <Input
-                                    value={recipientUpiId}
-                                    onChange={(e) => {
-                                      setRecipientUpiId(e.target.value);
-                                      setVerificationStatus(null);
-                                    }}
-                                    placeholder="name@upi or phone@paytm"
-                                    className="pl-4 pr-10 h-12 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-blue-400 rounded-xl text-sm"
-                                  />
-                                  {recipientUpiId && (
-                                    <button 
-                                      onClick={() => { setRecipientUpiId(''); setVerificationStatus(null); }}
-                                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                    >
-                                      <XCircle className="h-4 w-4" />
-                                    </button>
-                                  )}
+          <div className="relative z-10 text-center">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-2xl shadow-blue-500/30 mb-6">
+              <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">Fraudulent AI</h1>
+            <p className="text-lg text-slate-500 mb-8 max-w-md">ML-powered UPI fraud detection platform with real-time risk analysis</p>
+            <Button
+              onClick={handleGoogleSignIn}
+              className="px-8 py-4 h-auto bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl shadow-xl shadow-blue-500/30 hover:shadow-2xl hover:shadow-blue-500/40 transition-all duration-300"
+            >
+              Get Started
+            </Button>
+          </div>
+        </motion.div>
+      ) : (
+        <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+          {/* Desktop Sidebar */}
+          <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
+            {/* My QR Code Modal */}
+            <AnimatePresence>
+              {showMyQr && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowMyQr(false)}>
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold text-slate-800">My QR Code</h3>
+                      <Button variant="ghost" size="icon" onClick={() => setShowMyQr(false)} className="hover:bg-slate-100 rounded-full">
+                        <X className="h-5 w-5 text-slate-500" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-col items-center gap-6">
+                      <div className="p-4 bg-white rounded-xl shadow-lg border border-slate-100">
+                        <QRCode
+                          value={userData?.email || user?.email || ""}
+                          size={200}
+                          level="H"
+                        />
+                      </div>
+                      <div className="text-center">
+                        <p className="font-semibold text-slate-800">{userData?.name || "User"}</p>
+                        <p className="text-sm text-slate-500">{userData?.email || user?.email}</p>
+                        <p className="text-xs text-blue-600 mt-1 font-medium">{userData?.upiId || "UPI ID Loading..."}</p>
+                      </div>
+                      <p className="text-xs text-center text-slate-400 max-w-[80%]">
+                        Scan this QR code to quickly fetch account details and send money safely.
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* QR Scanner Modal */}
+            <AnimatePresence>
+              {showScanner && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={() => setShowScanner(false)}>
+                  <div className="w-full max-w-md h-full flex flex-col relative" onClick={e => e.stopPropagation()}>
+                    <div className="absolute top-4 right-4 z-10">
+                      <Button variant="ghost" size="icon" onClick={() => setShowScanner(false)} className="text-white hover:bg-white/20 rounded-full">
+                        <X className="h-6 w-6" />
+                      </Button>
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center items-center p-4">
+                      <h3 className="text-white font-semibold text-lg mb-8 flex items-center gap-2">
+                        <Camera className="h-5 w-5" /> Scan QR Code
+                      </h3>
+                      <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
+                        <QrReader
+                          constraints={{ facingMode: 'environment' }}
+                          onResult={(result, error) => {
+                            if (result) handleScanResult(result);
+                          }}
+                          style={{ width: '100%', height: '100%' }}
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Overlay Frame */}
+                        <div className="absolute inset-0 border-[30px] border-black/40 pointer-events-none">
+                          <div className="w-full h-full border-2 border-green-500/50 relative">
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500 -mt-1 -ml-1"></div>
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500 -mt-1 -mr-1"></div>
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500 -mb-1 -ml-1"></div>
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500 -mb-1 -mr-1"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-slate-400 text-sm mt-8 text-center px-8">
+                        Align the recipient's QR code within the frame to automatically fetch their UPI details.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            <SidebarContent />
+          </aside>
+
+          <main className="flex-1 flex flex-col min-w-0">
+            {/* Mobile Navigation */}
+            <MobileNav />
+
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5">
+              {/* Page Title */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">Simulate Transaction</h1>
+                  <p className="text-slate-500 text-sm mt-0.5">Test fraud detection with ML-powered risk analysis</p>
+                </div>
+                {/* Desktop Header Actions */}
+                <div className="flex items-center gap-2 md:gap-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowMyQr(true)}
+                    className="gap-2 text-slate-600 hover:bg-white/50 px-2 md:px-4"
+                  >
+                    <QrCode className="h-4 w-4" />
+                    <span className="hidden md:inline">Show QR</span>
+                    <span className="md:hidden">QR</span>
+                  </Button>
+                  <div className="hidden md:flex items-center gap-3 bg-white/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/50 shadow-sm">
+                    <User className="h-4 w-4 text-slate-500" />
+                    <span className="text-sm font-medium text-slate-700">{user?.displayName || user?.email}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-3">
+                {/* Main Send Form - Takes 2 columns */}
+                <div className="lg:col-span-3 space-y-5">
+                  {/* Transfer Form */}
+                  <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg overflow-hidden">
+                    <CardContent className="p-0">
+                      <AnimatePresence mode="wait">
+                        {sendStep === 'recipient' ? (
+                          <motion.div
+                            key="recipient"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -20 }}
+                            className="p-6 space-y-6"
+                          >
+                            {/* Payment Method Selection */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="p-4 rounded-xl border-2 border-blue-500 bg-blue-50/50 cursor-pointer transition-all relative overflow-hidden">
+                                <div className="absolute top-2 right-2 text-blue-500">
+                                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                                 </div>
-                                <Button
-                                  onClick={handleVerifyUPI}
-                                  disabled={verificationStatus === "loading" || !recipientUpiId}
-                                  className="h-12 px-6 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25 rounded-xl font-medium"
-                                >
-                                  {verificationStatus === "loading" ? (
-                                    <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                                  ) : (
-                                    "Verify"
-                                  )}
-                                </Button>
+                                <div className="p-2 bg-blue-100 w-10 h-10 rounded-lg flex items-center justify-center mb-3">
+                                  <CreditCard className="w-5 h-5 text-blue-600" />
+                                </div>
+                                <h3 className="font-semibold text-slate-800 text-sm">Enter UPI ID</h3>
+                                <p className="text-xs text-slate-500 mt-1">Pay to any UPI app</p>
                               </div>
-                              
-                              {/* Verification Status */}
+
+                              <div
+                                onClick={startScanning}
+                                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-md cursor-pointer transition-all group"
+                              >
+                                <div className="p-2 bg-purple-50 group-hover:bg-purple-100 w-10 h-10 rounded-lg flex items-center justify-center mb-3 transition-colors">
+                                  <QrCode className="w-5 h-5 text-purple-600" />
+                                </div>
+                                <h3 className="font-semibold text-slate-800 text-sm">Scan QR</h3>
+                                <p className="text-xs text-slate-500 mt-1">Scan to pay instantly</p>
+                              </div>
+                            </div>
+
+                            {/* Step 1: Recipient Verification */}
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium text-slate-700 ml-1">
+                                  Recipient Details
+                                </label>
+                                <div className="flex gap-2">
+                                  <div className="relative flex-grow">
+                                    <Input
+                                      value={recipientUpiId}
+                                      onChange={(e) => {
+                                        setRecipientUpiId(e.target.value);
+                                        setVerificationStatus(null);
+                                      }}
+                                      placeholder="Ex: mobileNumber@upi or username@bank"
+                                      className="pl-4 pr-10 h-12 bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-sm transition-all shadow-sm"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleVerifyUPI();
+                                        }
+                                      }}
+                                    />
+                                    {recipientUpiId && (
+                                      <button
+                                        onClick={() => { setRecipientUpiId(''); setVerificationStatus(null); }}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <Button
+                                    onClick={handleVerifyUPI}
+                                    disabled={verificationStatus === "loading" || !recipientUpiId}
+                                    className="h-12 px-6 bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 rounded-xl font-medium transition-all"
+                                  >
+                                    {verificationStatus === "loading" ? (
+                                      <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+                                    ) : (
+                                      "Verify"
+                                    )}
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Verification Status Display */}
                               <AnimatePresence mode="wait">
                                 {verificationStatus && verificationStatus !== "idle" && (
                                   <motion.div
-                                    key={verificationStatus}
-                                    initial={{ opacity: 0, y: -10, height: 0 }}
-                                    animate={{ opacity: 1, y: 0, height: 'auto' }}
-                                    exit={{ opacity: 0, y: -10, height: 0 }}
-                                    className={cn(
-                                      "p-3 rounded-xl",
-                                      verificationStatus === "valid" && "bg-emerald-50 border border-emerald-200",
-                                      verificationStatus === "loading" && "bg-blue-50 border border-blue-200",
-                                      (verificationStatus === "invalid" || verificationStatus === "error" || verificationStatus === "fraud") && "bg-red-50 border border-red-200"
-                                    )}
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
                                   >
-                                    {verificationStatus === "loading" && (
-                                      <div className="flex items-center gap-3">
-                                        <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
-                                        <div>
-                                          <p className="font-medium text-blue-700 text-sm">Verifying UPI ID...</p>
-                                          <p className="text-xs text-blue-500">Checking with bank servers</p>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {verificationStatus === "valid" && (
-                                      <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-emerald-100 rounded-full">
-                                          <Check className="h-4 w-4 text-emerald-600" />
-                                        </div>
-                                        <div>
-                                          <p className="font-medium text-emerald-700 text-sm">UPI ID Verified</p>
-                                          <p className="text-xs text-emerald-500">Ready to send money</p>
-                                          {verificationTrust != null && (
-                                            <p className="text-xs mt-1">
-                                              <span className="text-slate-500">Trust Score: </span>
-                                              <span className={`font-semibold ${verificationTrust >= 70 ? 'text-emerald-600' : verificationTrust >= 40 ? 'text-amber-600' : 'text-red-600'}`}>{verificationTrust}/100</span>
-                                            </p>
-                                          )}
-                                          {verificationRisk && (
-                                            <p className="text-xs mt-1">
-                                              <span className="text-slate-500">Risk: </span>
-                                              <span className={`${verificationRisk === 'high' ? 'text-red-600 font-semibold' : verificationRisk === 'medium' ? 'text-amber-600 font-semibold' : 'text-emerald-600 font-semibold'}`}>{verificationRisk.toUpperCase()}</span>
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {verificationStatus === "fraud" && (
-                                      <div className="space-y-3">
+                                    <div className={cn(
+                                      "p-4 rounded-xl border",
+                                      verificationStatus === "valid" ? "bg-emerald-50 border-emerald-100" :
+                                        verificationStatus === "fraud" ? "bg-red-50 border-red-100" :
+                                          verificationStatus === "loading" ? "bg-blue-50 border-blue-100" :
+                                            "bg-slate-50 border-slate-100"
+                                    )}>
+                                      {verificationStatus === "valid" && (
                                         <div className="flex items-center gap-3">
-                                          <div className="p-2 bg-red-100 rounded-full">
-                                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                                          <div className="p-2 bg-emerald-100 rounded-full flex-shrink-0">
+                                            <Check className="h-5 w-5 text-emerald-600" />
                                           </div>
-                                          <div>
-                                            <p className="font-medium text-red-700 text-sm">Fraud Alert</p>
-                                            <p className="text-xs text-red-500">This UPI ID is flagged as suspicious</p>
+                                          <div className="flex-1 min-w-0">
+                                            <h4 className="font-semibold text-emerald-900">Verified Recipient</h4>
+
+                                            <div className="mt-1 mb-2 space-y-0.5">
+                                              <p className="text-sm text-slate-700 font-medium truncate">
+                                                {recipientProfileForSimulation?.name || "Unknown Name"}
+                                              </p>
+                                              <p className="text-xs text-slate-500 truncate">
+                                                {recipientProfileForSimulation?.email || "No email available"}
+                                              </p>
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+                                              {verificationTrust != null && (
+                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-white/50 rounded-lg">
+                                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                                  <span className="text-xs font-medium text-emerald-800">Trust: {verificationTrust}%</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                          <div className="flex-shrink-0">
+                                            <Button
+                                              onClick={() => setSendStep('amount')}
+                                              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
+                                            >
+                                              Next <ChevronRight className="w-4 h-4 ml-1" />
+                                            </Button>
                                           </div>
                                         </div>
-                                        {verificationTrust != null && (
-                                          <div className="text-xs text-red-600">
-                                            Low trust score ({verificationTrust}/100)
+                                      )}
+
+                                      {verificationStatus === "fraud" && (
+                                        <div className="space-y-3">
+                                          <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-red-100 rounded-lg">
+                                              <AlertTriangle className="h-5 w-5 text-red-600" />
+                                            </div>
+                                            <div className="flex-1">
+                                              <h4 className="font-semibold text-red-900">High Risk Detected</h4>
+                                              <p className="text-sm text-red-700 mt-1">This UPI ID is associated with suspicious activity.</p>
+                                            </div>
                                           </div>
-                                        )}
-                                        {verificationRisk === 'high' && (
-                                          <div className="text-xs text-red-600">Risk level: HIGH — do not proceed without careful verification.</div>
-                                        )}
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={handleSeeWhy}
-                                          className="text-red-600 border-red-200 hover:bg-red-100 text-xs"
-                                        >
-                                          View Details <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                                        </Button>
-                                      </div>
-                                    )}
-                                    {verificationStatus === "invalid" && (
-                                      <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-red-100 rounded-full">
-                                          <XCircle className="h-4 w-4 text-red-600" />
+                                          <div className="flex gap-2 pl-12">
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={handleSeeWhy}
+                                              className="border-red-200 text-red-700 hover:bg-red-50 text-xs h-8"
+                                            >
+                                              View Analysis
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              onClick={() => setSendStep('amount')}
+                                              className="bg-red-600 hover:bg-red-700 text-white text-xs h-8"
+                                            >
+                                              Proceed Anyway
+                                            </Button>
+                                          </div>
                                         </div>
-                                        <div>
-                                          <p className="font-medium text-red-700 text-sm">Invalid UPI ID</p>
-                                          <p className="text-xs text-red-500">Please check and try again</p>
+                                      )}
+
+                                      {verificationStatus === "invalid" && (
+                                        <div className="flex items-center gap-3 text-red-700">
+                                          <XCircle className="h-5 w-5" />
+                                          <span className="font-medium">Invalid UPI ID</span>
                                         </div>
-                                      </div>
-                                    )}
-                                    {verificationStatus === "error" && (
-                                      <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-red-100 rounded-full">
-                                          <XCircle className="h-4 w-4 text-red-600" />
-                                        </div>
-                                        <div>
-                                          <p className="font-medium text-red-700 text-sm">Verification Failed</p>
-                                          <p className="text-xs text-red-500">Network error, please retry</p>
-                                        </div>
-                                      </div>
-                                    )}
+                                      )}
+                                    </div>
                                   </motion.div>
                                 )}
                               </AnimatePresence>
-
-                              <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
-                                <AlertDialogContent className="bg-white rounded-2xl">
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle className="text-slate-800 flex items-center gap-2">
-                                      <ShieldAlert className="h-5 w-5 text-red-500" />
-                                      Fraud Warning
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="text-slate-600">
-                                      This UPI ID has been associated with reported scams and fraudulent activities. Our AI system strongly recommends not proceeding with this transaction.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel className="border-slate-200">Cancel</AlertDialogCancel>
-                                    <AlertDialogAction className="bg-red-500 hover:bg-red-600">I Understand the Risk</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
                             </div>
 
-                            {/* Amount Input */}
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                                <IndianRupee className="h-4 w-4 text-blue-500" />
-                                Amount
-                              </label>
+                            {/* Recent Transactions */}
+                            {!verificationStatus && recentTransactions.length > 0 && (
+                              <div className="mt-2 pt-6 border-t border-slate-100">
+                                <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                                  <History className="h-4 w-4 text-slate-500" />
+                                  Recent Transactions
+                                </h3>
+                                <div className="space-y-3">
+                                  {recentTransactions.map((tx) => (
+                                    <div
+                                      key={tx.id}
+                                      onClick={() => {
+                                        setRecipientUpiId(tx.upi);
+                                        handleVerifyUPI(tx.upi);
+                                      }}
+                                      className="flex items-center gap-4 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200 cursor-pointer transition-all group"
+                                    >
+                                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-700 font-bold text-sm shadow-sm group-hover:scale-105 transition-transform">
+                                        {tx.avatarInt}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                          <p className="font-semibold text-slate-800 text-sm truncate">{tx.name}</p>
+                                          <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">{tx.date}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 truncate group-hover:text-blue-600 transition-colors">{tx.upi}</p>
+                                      </div>
+                                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="amount"
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 20 }}
+                            className="p-6 space-y-6"
+                          >
+                            {/* Header with Back Button */}
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={() => setSendStep('recipient')}
+                                className="flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
+                              >
+                                <ChevronRight className="w-4 h-4 rotate-180" />
+                                Back to UPI
+                              </button>
+                              <div className="flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full">
+                                <User className="w-3.5 h-3.5 text-slate-500" />
+                                <span className="text-xs font-semibold text-slate-700">{recipientUpiId}</span>
+                              </div>
+                            </div>
+
+                            {/* Available Balance Display */}
+                            <div className="p-4 rounded-xl bg-gradient-to-r from-slate-800 to-slate-900 text-white shadow-lg">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Available Balance</p>
+                                  <p className="text-2xl font-bold">₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                                <Wallet className="w-8 h-8 text-slate-600" />
+                              </div>
+                            </div>
+
+                            {/* Amount Input Section */}
+                            <div className="space-y-4">
                               <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400 font-bold">₹</span>
                                 <Input
@@ -5546,261 +867,184 @@ import { db } from "./firebase.js";
                                     "pl-12 text-3xl font-bold h-16 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-300 focus:bg-white rounded-xl",
                                     insufficientFunds && "border-red-300 bg-red-50/50 focus:border-red-400"
                                   )}
+                                  autoFocus
                                 />
                               </div>
+
+
+                              {/* Quick Amounts */}
+                              <div className="grid grid-cols-4 gap-2">
+                                {[100, 500, 1000, 2000].map((quickAmount) => (
+                                  <button
+                                    key={quickAmount}
+                                    onClick={() => setAmount(quickAmount.toString())}
+                                    className="py-2 px-1 rounded-lg border border-slate-200 bg-white hover:border-blue-300 hover:text-blue-600 text-xs font-semibold text-slate-600 transition-all"
+                                  >
+                                    ₹{quickAmount}
+                                  </button>
+                                ))}
+                              </div>
+
                               {insufficientFunds && (
-                                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
-                                  <AlertTriangle className="h-4 w-4 text-red-500" />
-                                  <p className="text-red-600 text-sm font-medium">
-                                    Insufficient balance. Available: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                  </p>
-                                </div>
+                                <p className="text-xs font-medium text-red-600 flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  Insufficient funds for this transaction
+                                </p>
                               )}
-                              {amount && !insufficientFunds && Number(amount) > 0 && (
-                                <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                                  <Check className="h-4 w-4 text-emerald-500" />
-                                  <p className="text-emerald-600 text-sm">
-                                    Balance after: <span className="font-semibold">₹{(balance - Number(amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                                  </p>
-                                </div>
-                              )}
+
                             </div>
 
                             {/* Transaction Context */}
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                                <MessageSquare className="h-4 w-4 text-blue-500" />
-                                Transaction Context
-                              </label>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                            <div className="space-y-3">
+                              <label className="text-sm font-medium text-slate-700">Payment For</label>
+                              <div className="flex flex-wrap gap-2">
                                 {remarkOptions.map((option) => (
-                                  <Button
+                                  <button
                                     key={option.value}
-                                    variant="outline"
                                     className={cn(
-                                      "h-10 border-slate-200 bg-slate-50/80 hover:bg-blue-50 hover:border-blue-300 text-slate-600 rounded-xl text-xs font-medium",
-                                      remarks === option.value && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
+                                      "px-3 py-1.5 border rounded-lg text-xs font-medium transition-all",
+                                      remarks === option.value
+                                        ? "bg-blue-50 border-blue-500 text-blue-700"
+                                        : "bg-white border-slate-200 text-slate-600 hover:border-blue-300"
                                     )}
                                     onClick={() => setRemarks(option.value)}
                                   >
                                     {option.label}
-                                  </Button>
+                                  </button>
                                 ))}
                               </div>
                             </div>
 
-                            {/* Note Input */}
+                            {/* Note */}
                             <div className="space-y-2">
-                              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                                <FileText className="h-4 w-4 text-blue-500" />
-                                Note <span className="text-slate-400 font-normal text-xs">(optional)</span>
-                              </label>
                               <Input
-                                placeholder="What's this payment for?"
-                                className="h-12 bg-slate-50/80 border-slate-200 text-slate-800 placeholder:text-slate-400 focus:bg-white rounded-xl"
+                                placeholder="Add a note (optional)"
+                                className="bg-slate-50 border-slate-200"
                               />
                             </div>
 
-                            {/* Submit Button */}
-                            {selfTransferError && (
-                              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl mb-3">
-                                <AlertTriangle className="h-4 w-4 text-red-500" />
-                                <p className="text-red-600 text-sm font-medium">You cannot send money to the same UPI ID as your account.</p>
-                              </div>
-                            )}
-                            <Button 
-                              onClick={handleSendMoney} 
-                              disabled={insufficientFunds || !amount || Number(amount) <= 0 || !recipientUpiId || verificationStatus !== "valid"}
-                              className={cn(
-                                "w-full h-14 text-base font-semibold rounded-xl transition-all gap-2",
-                                insufficientFunds || !amount || Number(amount) <= 0 || !recipientUpiId || verificationStatus !== "valid"
-                                  ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                                  : "bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 text-white hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 shadow-xl shadow-blue-500/25"
-                              )}
+                            {/* Send Button */}
+                            <Button
+                              onClick={handleSendMoney}
+                              disabled={insufficientFunds || !amount || Number(amount) <= 0}
+                              className="w-full h-14 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xl shadow-blue-500/20 rounded-xl font-semibold text-lg"
                             >
-                              {insufficientFunds ? (
-                                <><AlertTriangle className="h-5 w-5" /> Insufficient Balance</>
-                              ) : !recipientUpiId ? (
-                                <><User className="h-5 w-5" /> Enter UPI ID</>
-                              ) : verificationStatus !== "valid" ? (
-                                <><ShieldCheck className="h-5 w-5" /> Verify UPI First</>
-                              ) : !amount || Number(amount) <= 0 ? (
-                                <><IndianRupee className="h-5 w-5" /> Enter Amount</>
-                              ) : (
-                                <><Rocket className="h-5 w-5" /> Send ₹{Number(amount).toLocaleString('en-IN')}</>
-                              )}
+                              Pay ₹{Number(amount || 0).toLocaleString('en-IN')}
                             </Button>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    </div>
-
-                    {/* Side Panel - Right Column */}
-                    <div className="space-y-5">
-                      {/* Balance Card */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 }}
-                      >
-                        <Card className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 border-0 text-white overflow-hidden relative">
-                          <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-                          <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-                          <CardContent className="p-5 relative">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-blue-200 text-xs font-medium uppercase tracking-wider mb-1">Available Balance</p>
-                                <p className="text-3xl font-bold">₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="p-3 bg-white/10 rounded-xl">
-                                  <Wallet className="h-6 w-6 text-white" />
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-white/10">
-                              <CreditCard className="h-4 w-4 text-blue-200" />
-                              <span className="text-blue-100 text-sm">{upiId || 'No UPI ID set'}</span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-
-                      {/* Quick Amount Select */}
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.15 }}
-                      >
-                        <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
-                          <CardContent className="p-4">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-3 text-sm">
-                              <Zap className="h-4 w-4 text-amber-500" />
-                              Quick Amount
-                            </h3>
-                            <div className="grid grid-cols-3 gap-2">
-                              {[100, 200, 500, 1000, 2000, 5000].map((quickAmount) => (
-                                <Button
-                                  key={quickAmount}
-                                  variant="outline"
-                                  onClick={() => setAmount(quickAmount.toString())}
-                                  className={cn(
-                                    "h-9 rounded-lg border-slate-200 bg-slate-50/50 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 text-slate-700 transition-all font-semibold text-xs",
-                                    amount === quickAmount.toString() && "bg-blue-50 border-blue-400 text-blue-600 ring-2 ring-blue-100"
-                                  )}
-                                >
-                                  ₹{quickAmount >= 1000 ? `${quickAmount/1000}K` : quickAmount}
-                                </Button>
-                              ))}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-
-                   </div>  
-                  </div>
-                    
-                  {/* Transaction Simulation */}
-                  {showSimulation && user && (
-                    <TransactionSimulation 
-                      upiId={recipientUpiId} 
-                      amount={amount} 
-                      remarks={remarks} 
-                      senderUPI={upiId}
-                      initialRecipientProfile={recipientProfileForSimulation}
-                      onClose={() => setShowSimulation(false)}
-                    />
-                  )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </CardContent>
+                  </Card>
                 </div>
-              </main>
+
+                {/* Side Panel - Right Column (No longer needed for balance) */}
+                {/* We can potentially add transaction history or other quick actions here later */}
+
+                {/* Transaction Simulation */}
+                {showSimulation && user && (
+                  <TransactionSimulation
+                    upiId={recipientUpiId}
+                    amount={amount}
+                    remarks={remarks}
+                    senderUPI={upiId}
+                    initialRecipientProfile={recipientProfileForSimulation}
+                    onClose={() => setShowSimulation(false)}
+                  />
+                )}
+              </div>
             </div>
-          )}
-    
-          {/* Transaction Details Popup - Using Portal to render to body */}
-          {createPortal(
-            <AnimatePresence>
-              {showPopup && (
+          </main>
+        </div >
+      )
+      }
+
+      {/* Transaction Details Popup - Using Portal to render to body */}
+      {
+        createPortal(
+          <AnimatePresence>
+            {showPopup && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-2xl"
+                style={{ zIndex: 9999 }}
+                onClick={() => setShowPopup(false)}
+              >
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-2xl"
-                  style={{ zIndex: 9999 }}
-                  onClick={() => setShowPopup(false)}
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                  className="bg-white rounded-2xl shadow-2xl max-w-lg w-full m-4 overflow-hidden border border-slate-200/50"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  <motion.div
-                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
-                    className="bg-white rounded-2xl shadow-2xl max-w-lg w-full m-4 overflow-hidden border border-slate-200/50"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {/* Header */}
-                    <div className="relative bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 p-5">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                      <div className="relative flex justify-between items-center">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-white/20 rounded-xl">
-                            <FileText className="h-5 w-5 text-white" />
-                          </div>
-                          <h2 className="text-xl font-bold text-white">Transaction Details</h2>
+                  {/* Header */}
+                  <div className="relative bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 p-5">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                    <div className="relative flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white/20 rounded-xl">
+                          <FileText className="h-5 w-5 text-white" />
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setShowPopup(false)}
-                          className="text-white/80 hover:text-white hover:bg-white/20 rounded-xl"
-                        >
-                          <X className="h-5 w-5" />
-                        </Button>
+                        <h2 className="text-xl font-bold text-white">Transaction Details</h2>
                       </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-5 max-h-[50vh] overflow-y-auto">
-                      {transactionData.length > 0 ? (
-                        <div className="space-y-3">
-                          {transactionData.map(([key, value], index) => (
-                            <motion.div
-                              key={key}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: index * 0.03 }}
-                              className="flex items-start justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors"
-                            >
-                              <span className="text-sm font-medium text-slate-500">{key}</span>
-                              <span className="text-sm font-semibold text-slate-800 text-right max-w-[60%]">{String(value)}</span>
-                            </motion.div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-12">
-                          <div className="p-4 bg-slate-100 rounded-full mb-4">
-                            <FileText className="h-8 w-8 text-slate-400" />
-                          </div>
-                          <p className="text-slate-500 font-medium">No data found</p>
-                          <p className="text-slate-400 text-sm mt-1">Transaction details unavailable</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="p-4 bg-slate-50 border-t border-slate-100">
                       <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setShowPopup(false)}
-                        className="w-full h-12 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25"
+                        className="text-white/80 hover:text-white hover:bg-white/20 rounded-xl"
                       >
-                        Close
+                        <X className="h-5 w-5" />
                       </Button>
                     </div>
-                  </motion.div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-5 max-h-[50vh] overflow-y-auto">
+                    {transactionData.length > 0 ? (
+                      <div className="space-y-3">
+                        {transactionData.map(([key, value], index) => (
+                          <motion.div
+                            key={key}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.03 }}
+                            className="flex items-start justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl transition-colors"
+                          >
+                            <span className="text-sm font-medium text-slate-500">{key}</span>
+                            <span className="text-sm font-semibold text-slate-800 text-right max-w-[60%]">{String(value)}</span>
+                          </motion.div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="p-4 bg-slate-100 rounded-full mb-4">
+                          <FileText className="h-8 w-8 text-slate-400" />
+                        </div>
+                        <p className="text-slate-500 font-medium">No data found</p>
+                        <p className="text-slate-400 text-sm mt-1">Transaction details unavailable</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="p-4 bg-slate-50 border-t border-slate-100">
+                    <Button
+                      onClick={() => setShowPopup(false)}
+                      className="w-full h-12 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25"
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </motion.div>
-              )}
-            </AnimatePresence>,
-            document.body
-          )}
-        </motion.div>
-      );
-    }
-    
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )
+      }
+    </motion.div >
+  );
+}

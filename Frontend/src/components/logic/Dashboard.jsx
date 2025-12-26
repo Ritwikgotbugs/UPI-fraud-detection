@@ -20,6 +20,7 @@ import {
   EyeOff,
   FileWarning,
   Gauge,
+  QrCode,
   RefreshCw,
   Send,
   Settings,
@@ -42,12 +43,12 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { 
-    user, 
-    userData, 
-    balance: contextBalance, 
-    transactions: contextTransactions, 
-    totalSpending: contextTotalSpending, 
+  const {
+    user,
+    userData,
+    balance: contextBalance,
+    transactions: contextTransactions,
+    totalSpending: contextTotalSpending,
     totalReceived: contextTotalReceived,
     refreshData,
     notifications,
@@ -55,7 +56,7 @@ const Dashboard = () => {
     markAsRead,
     markAllAsRead
   } = useAuth();
-  
+
   const [upiId, setUpiId] = useState("");
   const [balance, setBalance] = useState(contextBalance);
   const [transactions, setTransactions] = useState(contextTransactions);
@@ -78,12 +79,12 @@ const Dashboard = () => {
     setTransactions(contextTransactions);
     setTotalSpending(contextTotalSpending);
     setTotalReceived(contextTotalReceived);
-    
-    
+
+
     if (userData?.transactionDetails) {
       const params = userData.transactionDetails;
-      let score = 10; 
-      
+      let score = 10;
+
       if (params.recipientBlacklistStatus) score += 30;
       if (params.vpnProxyUsage) score += 15;
       if (params.geoLocationFlags === 'high-risk') score += 20;
@@ -99,7 +100,7 @@ const Dashboard = () => {
       if (params.recipientVerificationStatus === 'unverified') score += 15;
       if (params.accountAge && params.accountAge < 30) score += 10;
       if (params.socialTrustScore && params.socialTrustScore < 50) score += 15;
-      
+
       const finalScore = Math.min(100, score);
       setAccountRiskScore(finalScore);
       setRiskLevel(finalScore >= 60 ? 'high' : finalScore >= 35 ? 'medium' : 'low');
@@ -156,23 +157,23 @@ const Dashboard = () => {
   useEffect(() => {
     if (userData?.upiId) {
       setUpiId(userData.upiId);
-      
-      
+
+
       const lowRisk = contextTransactions.filter(tx => tx.riskLevel === 'low' || !tx.riskLevel).length;
       const mediumRisk = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
       const highRisk = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
-      
+
       setRiskDistribution([
         { name: 'Safe', value: lowRisk, color: '#10b981' },
         { name: 'Suspicious', value: mediumRisk, color: '#f59e0b' },
         { name: 'Flagged', value: highRisk, color: '#ef4444' },
       ].filter(item => item.value > 0));
 
-      
+
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthlyRisk = {};
       months.forEach(m => { monthlyRisk[m] = { safe: 0, suspicious: 0, flagged: 0 }; });
-      
+
       contextTransactions.forEach(tx => {
         const timestamp = tx.createdAt || tx.timestamp;
         if (timestamp) {
@@ -187,13 +188,13 @@ const Dashboard = () => {
           }
         }
       });
-      
+
       const currentMonth = new Date().getMonth();
       const last6Months = [];
       for (let i = 5; i >= 0; i--) {
         const monthIdx = (currentMonth - i + 12) % 12;
-        last6Months.push({ 
-          name: months[monthIdx], 
+        last6Months.push({
+          name: months[monthIdx],
           safe: monthlyRisk[months[monthIdx]].safe,
           suspicious: monthlyRisk[months[monthIdx]].suspicious,
           flagged: monthlyRisk[months[monthIdx]].flagged
@@ -204,13 +205,13 @@ const Dashboard = () => {
   }, [userData?.upiId, contextTransactions]);
 
   const quickActions = [
-    { icon: Send, label: "Send Money", color: "from-blue-500 to-blue-600", path: "/send-money" },
+    { icon: QrCode, label: "Send Money", color: "from-blue-500 to-blue-600", path: "/send-money" },
     { icon: FileWarning, label: "Report Fraud", color: "from-red-500 to-rose-600", path: "/report-fraud" },
     { icon: Settings, label: "ML Settings", color: "from-violet-500 to-purple-600", path: "/settings" },
     { icon: Shield, label: "View Reports", color: "from-emerald-500 to-green-600", path: "/admin" },
   ];
 
-  
+
   const highRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
   const mediumRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
 
@@ -220,14 +221,14 @@ const Dashboard = () => {
       <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
         <SidebarContent />
       </aside>
-      
+
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile Navigation */}
         <MobileNav />
-        
+
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-6">
           {/* Welcome Section with Balance Card */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="grid gap-6 lg:grid-cols-3"
@@ -236,7 +237,7 @@ const Dashboard = () => {
             <Card className="lg:col-span-2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 border-0 text-white overflow-hidden relative">
               <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-              
+
               <CardContent className="p-6 relative">
                 <div className="flex items-start justify-between mb-6">
                   <div className="flex items-center gap-4">
@@ -252,9 +253,9 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={handleRefresh}
                       className="text-white/70 hover:text-white hover:bg-white/10"
                     >
@@ -327,9 +328,9 @@ const Dashboard = () => {
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
                       {showBalance ? `₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : '₹••••••'}
                     </h1>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => setShowBalance(!showBalance)}
                       className="text-white/70 hover:text-white hover:bg-white/10"
                     >
@@ -388,11 +389,10 @@ const Dashboard = () => {
 
             {/* Security & Risk Cards */}
             <div className="space-y-4">
-              <Card className={`border-0 shadow-lg ${
-                riskLevel === 'low' ? 'bg-gradient-to-br from-emerald-500 to-green-600' :
-                riskLevel === 'medium' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                'bg-gradient-to-br from-red-500 to-rose-600'
-              } text-white`}>
+              <Card className={`border-0 shadow-lg ${riskLevel === 'low' ? 'bg-gradient-to-br from-emerald-500 to-green-600' :
+                  riskLevel === 'medium' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                    'bg-gradient-to-br from-red-500 to-rose-600'
+                } text-white`}>
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -404,28 +404,27 @@ const Dashboard = () => {
                         <p className="text-3xl font-bold">{accountRiskScore}</p>
                       </div>
                     </div>
-                    <Badge className={`${
-                      riskLevel === 'low' ? 'bg-emerald-100 text-emerald-700' :
-                      riskLevel === 'medium' ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    } border-0`}>
+                    <Badge className={`${riskLevel === 'low' ? 'bg-emerald-100 text-emerald-700' :
+                        riskLevel === 'medium' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                      } border-0`}>
                       {riskLevel.toUpperCase()}
                     </Badge>
                   </div>
                   <div className="w-full bg-white/20 rounded-full h-2 mb-2">
-                    <div 
+                    <div
                       className="bg-white h-2 rounded-full transition-all"
                       style={{ width: `${accountRiskScore}%` }}
                     />
                   </div>
                   <p className="text-xs text-white/70">
                     {riskLevel === 'low' ? 'Your profile appears trustworthy' :
-                     riskLevel === 'medium' ? 'Some risk factors detected' :
-                     'Multiple risk factors - review your settings'}
+                      riskLevel === 'medium' ? 'Some risk factors detected' :
+                        'Multiple risk factors - review your settings'}
                   </p>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="mt-2 text-white hover:bg-white/20 p-0 h-auto"
                     onClick={() => navigate('/settings')}
                   >
@@ -446,7 +445,7 @@ const Dashboard = () => {
                     </div>
                   </div>
                   <p className="text-xs text-slate-700 mb-3">Report suspicious users or fraudulent transactions to help protect the community</p>
-                  <Button 
+                  <Button
                     className="w-full bg-red-500 hover:bg-red-600 text-white"
                     onClick={() => navigate('/report-fraud')}
                   >
@@ -514,16 +513,16 @@ const Dashboard = () => {
                     <AreaChart data={riskTrendData.length > 0 ? riskTrendData : [{ name: 'No Data', safe: 0, suspicious: 0, flagged: 0 }]}>
                       <defs>
                         <linearGradient id="colorSafe" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorSuspicious" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="colorFlagged" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
@@ -570,13 +569,13 @@ const Dashboard = () => {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie 
-                        data={riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]} 
-                        cx="50%" 
-                        cy="50%" 
-                        innerRadius={50} 
-                        outerRadius={70} 
-                        paddingAngle={5} 
+                      <Pie
+                        data={riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={5}
                         dataKey="value"
                       >
                         {(riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]).map((entry, index) => (
@@ -644,9 +643,8 @@ const Dashboard = () => {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 * i }}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl border ${
-                            tx.riskLevel === 'high' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
-                          }`}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl border ${tx.riskLevel === 'high' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
+                            }`}
                         >
                           <div className={`p-2 rounded-lg ${tx.riskLevel === 'high' ? 'bg-red-100' : 'bg-amber-100'}`}>
                             <AlertTriangle className={`h-4 w-4 ${tx.riskLevel === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
@@ -705,7 +703,7 @@ const Dashboard = () => {
                           >
                             <div className="flex items-center gap-2">
                               <div className={`p-1.5 rounded-lg ${tx.transactionType === 'received' ? 'bg-emerald-100' : 'bg-rose-100'}`}>
-                                {tx.transactionType === 'received' 
+                                {tx.transactionType === 'received'
                                   ? <ArrowDownLeft className="h-3 w-3 text-emerald-600" />
                                   : <ArrowUpRight className="h-3 w-3 text-rose-600" />
                                 }

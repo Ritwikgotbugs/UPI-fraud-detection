@@ -15,7 +15,7 @@ const RiskProgressRing = ({ score, level }) => {
   const radius = 50;
   const circumference = 2 * Math.PI * radius;
   const progress = (score / 100) * circumference;
-  
+
   const getColor = () => {
     switch (level) {
       case 'high': return '#ef4444';
@@ -76,17 +76,17 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   const [checkingRecipient, setCheckingRecipient] = useState(true)
   const { refreshData, userData } = useAuth();
 
-  
+
   useEffect(() => {
     const fetchRecipientProfile = async () => {
       if (initialRecipientProfile) {
         setRecipientProfileData(initialRecipientProfile);
         setCheckingRecipient(false);
         try {
-          const offline = generateOfflineRiskAnalysis();
+          const offline = generateOfflineRiskAnalysis(initialRecipientProfile);
           setRiskAnalysis(offline);
           setCurrentStep('risk_review');
-        } catch (e) {}
+        } catch (e) { }
         return;
       }
       if (!upiId) {
@@ -95,28 +95,28 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
       }
 
       try {
-        
+
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("upiId", "==", upiId.toLowerCase()));
         const snapshot = await getDocs(q);
-        
+
         if (!snapshot.empty) {
-            const recipientData = snapshot.docs[0].data();
-            
-            setRecipientProfileData({
-              ...recipientData,
-              params: recipientData.transactionDetails || recipientData.params || {},
-              modelData: recipientData.modelData || {}
-            });
-            
-            
-            setTimeout(() => {
-              try {
-                setRiskAnalysis(generateOfflineRiskAnalysis());
-              } catch (e) {
-                
-              }
-            }, 0);
+          const recipientData = snapshot.docs[0].data();
+          const formattedData = {
+            ...recipientData,
+            params: recipientData.transactionDetails || recipientData.params || {},
+            modelData: recipientData.modelData || {}
+          };
+
+          setRecipientProfileData(formattedData);
+
+          setTimeout(() => {
+            try {
+              setRiskAnalysis(generateOfflineRiskAnalysis(formattedData));
+            } catch (e) {
+              console.error("Error generating risk analysis:", e);
+            }
+          }, 0);
         }
       } catch (error) {
         console.error("Error fetching recipient profile:", error);
@@ -128,7 +128,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
     fetchRecipientProfile();
   }, [upiId]);
 
-  
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -136,14 +136,14 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
     };
   }, []);
 
-  
-  const generateOfflineRiskAnalysis = () => {
+
+  const generateOfflineRiskAnalysis = (profileData = recipientProfileData) => {
     let riskScore = 10;
     const factors = [];
 
-    
-    if (recipientProfileData?.params && Object.keys(recipientProfileData.params).length > 0) {
-      const params = recipientProfileData.params;
+
+    if (profileData?.params && Object.keys(profileData.params).length > 0) {
+      const params = profileData.params;
 
       if (params.recipientBlacklistStatus) {
         riskScore += 40;
@@ -232,9 +232,9 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         factors.push(`${params.recentHighValueFlags} recent high-value transaction flags`);
       }
 
-    } else if (recipientProfileData?.modelData && Object.keys(recipientProfileData.modelData).length > 0) {
-      
-      const m = recipientProfileData.modelData;
+    } else if (profileData?.modelData && Object.keys(profileData.modelData).length > 0) {
+
+      const m = profileData.modelData;
 
       if ((m['Recipient Blacklist Status'] || m['Recipient Blacklist Status'] === 1) && m['Recipient Blacklist Status'] > 0.5) {
         riskScore += 40;
@@ -267,7 +267,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         factors.push('Untrusted device fingerprint detected (model)');
       }
 
-      
+
       let socialTrust = null;
       if (typeof m['Social Trust Score'] !== 'undefined') {
         socialTrust = m['Social Trust Score'] > 1 ? Math.round(m['Social Trust Score']) : Math.round(m['Social Trust Score'] * 100);
@@ -280,24 +280,24 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         }
       }
 
-      
+
       if (typeof m['Account Age'] !== 'undefined' && m['Account Age'] < 0.2) {
         riskScore += 12;
         factors.push('Model indicates recipient account is very new');
       }
 
-      
+
       if (factors.length === 0) {
         factors.push('✓ No prominent flags from model');
       }
 
     } else {
-      
+
       factors.push('⚠️ Recipient profile data not available');
       riskScore += 15;
     }
-    
-    
+
+
     const numAmount = Number(amount);
     if (numAmount > 50000) {
       riskScore += 30;
@@ -306,55 +306,55 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
       riskScore += 15;
       factors.push('High transaction amount (₹20,000+)');
     }
-    
-    
+
+
     const hour = new Date().getHours();
     if (hour >= 23 || hour < 5) {
       riskScore += 20;
       factors.push('Late night transaction (high-risk hours)');
     }
-    
-    
+
+
     if (factors.length === 0) {
       factors.push('✓ All security checks passed');
     }
 
     let finalScore = Math.min(100, riskScore);
 
-    
-    const trustFromParams = recipientProfileData?.params?.socialTrustScore;
-    const trustFromModel = recipientProfileData?.modelData?.['Social Trust Score'];
+
+    const trustFromParams = profileData?.params?.socialTrustScore;
+    const trustFromModel = profileData?.modelData?.['Social Trust Score'];
     const trustVal = typeof trustFromParams !== 'undefined' ? trustFromParams : (typeof trustFromModel !== 'undefined' ? (trustFromModel > 1 ? trustFromModel : Math.round(trustFromModel * 100)) : null);
     if (trustVal != null && (factors.length === 1 && factors[0].startsWith('✓'))) {
       finalScore = Math.min(100, 100 - Number(trustVal));
     }
     const isHighRisk = finalScore >= 60;
     const isMediumRisk = finalScore >= 35 && finalScore < 60;
-    
+
     return {
       risk_score: finalScore,
       risk_level: isHighRisk ? 'high' : isMediumRisk ? 'medium' : 'low',
       should_block: isHighRisk,
       requires_verification: isMediumRisk,
       factors,
-      recommendations: isHighRisk 
+      recommendations: isHighRisk
         ? ['Transaction is high risk - proceed with extreme caution', 'Verify recipient identity before proceeding']
-        : isMediumRisk 
+        : isMediumRisk
           ? ['Verify transaction details carefully', 'Confirm you know this recipient']
           : ['Transaction appears safe'],
       offline: true,
-      recipientProfile: recipientProfileData?.params || null
+      recipientProfile: profileData?.params || null
     };
   };
 
-  
+
   const analyzeRisk = async () => {
     setIsAnalyzing(true);
     try {
-      
+
       const recipientParams = recipientProfileData?.params || {};
       const recipientModelData = recipientProfileData?.modelData || {};
-      
+
       const response = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -369,7 +369,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             screenRes: `${window.screen.width}x${window.screen.height}`
           },
           location: {},
-          
+
           recipientProfile: recipientProfileData ? {
             isBlacklisted: recipientParams.recipientBlacklistStatus,
             verificationStatus: recipientParams.recipientVerificationStatus,
@@ -389,11 +389,11 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
       if (response.ok) {
         const result = await response.json();
         let analysis = result.risk_assessment;
-        
-        
+
+
         if (recipientProfileData?.params) {
           const additionalFactors = [];
-          
+
           if (recipientParams.recipientBlacklistStatus) {
             additionalFactors.push('⚠️ Recipient is on a blacklist');
           }
@@ -412,21 +412,21 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
           if (recipientParams.socialTrustScore && recipientParams.socialTrustScore < 30) {
             additionalFactors.push(`Recipient has low trust score (${recipientParams.socialTrustScore})`);
           }
-          
-          
+
+
           let additionalRisk = 0;
           if (recipientParams.recipientBlacklistStatus) additionalRisk += 30;
           if (recipientParams.fraudComplaintsCount > 0) additionalRisk += recipientParams.fraudComplaintsCount * 5;
           if (recipientParams.recipientVerificationStatus === 'unverified') additionalRisk += 15;
-          
+
           analysis = {
             ...analysis,
             risk_score: Math.min(100, (analysis.risk_score || 0) + additionalRisk),
             factors: [...additionalFactors, ...(analysis.factors || [])],
             recipientProfile: recipientParams
           };
-          
-          
+
+
           if (analysis.risk_score >= 60) {
             analysis.risk_level = 'high';
             analysis.should_block = true;
@@ -435,18 +435,18 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             analysis.requires_verification = true;
           }
         }
-        
+
         setRiskAnalysis(analysis);
         setCurrentStep('risk_review');
       } else {
-        
+
         const offlineAnalysis = generateOfflineRiskAnalysis();
         setRiskAnalysis(offlineAnalysis);
         setCurrentStep('risk_review');
       }
     } catch (error) {
       console.error('Risk analysis failed:', error);
-      
+
       const offlineAnalysis = generateOfflineRiskAnalysis();
       setRiskAnalysis(offlineAnalysis);
       setCurrentStep('risk_review');
@@ -456,13 +456,13 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
   const handleConfirm = async () => {
-    
+
     if (!riskAnalysis) {
       await analyzeRisk();
       return;
     }
 
-    
+
     if (riskAnalysis?.should_block) {
       setCurrentStep('blocked');
       return;
@@ -471,10 +471,10 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
     setIsLoading(true);
     setCurrentStep("processing");
     try {
-      
+
       await new Promise(resolve => setTimeout(resolve, 2000));
-  
-      
+
+
       const transactionData = {
         amount: Number(amount) || 0,
         recipientUPI: upiId || "",
@@ -485,19 +485,19 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         riskScore: riskAnalysis?.risk_score || 0,
         riskLevel: riskAnalysis?.risk_level || 'low'
       };
-      
+
       if (remarks && remarks.trim()) {
         transactionData.remarks = remarks;
       }
 
-      
+
       await addDoc(collection(db, "transactions"), transactionData);
       await addDoc(collection(db, "transactions"), {
         ...transactionData,
         transactionType: "received",
       });
 
-      
+
       await addDoc(collection(db, "notifications"), {
         recipientUPI: senderUPI,
         type: "sent",
@@ -529,12 +529,12 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
   const proceedAnyway = async () => {
-    
+
     setIsLoading(true);
     setCurrentStep("processing");
     try {
       await new Promise(resolve => setTimeout(resolve, 2000));
-  
+
       const transactionData = {
         amount: Number(amount) || 0,
         recipientUPI: upiId || "",
@@ -544,9 +544,9 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         createdAt: serverTimestamp(),
         riskScore: riskAnalysis?.risk_score || 0,
         riskLevel: riskAnalysis?.risk_level || 'low',
-        userOverride: true 
+        userOverride: true
       };
-      
+
       if (remarks && remarks.trim()) {
         transactionData.remarks = remarks;
       }
@@ -625,11 +625,11 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: { 
+    visible: {
       opacity: 1,
       transition: { when: "beforeChildren", staggerChildren: 0.08 }
     },
-    exit: { 
+    exit: {
       opacity: 0,
       transition: { when: "afterChildren", staggerChildren: 0.03, staggerDirection: -1 }
     }
@@ -637,23 +637,22 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
   const itemVariants = {
     hidden: { y: 15, opacity: 0 },
-    visible: { 
+    visible: {
       y: 0, opacity: 1,
       transition: { type: 'spring', damping: 20, stiffness: 300 }
     },
-    exit: { 
+    exit: {
       y: -10, opacity: 0,
       transition: { type: 'spring', damping: 20, stiffness: 300 }
     }
   }
 
   const DetailItem = ({ icon: Icon, label, value, highlight }) => (
-    <motion.div 
-      className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 ${
-        highlight 
-          ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200' 
-          : 'bg-slate-50/80 border-slate-100 hover:border-slate-200'
-      }`}
+    <motion.div
+      className={`flex items-center gap-4 p-4 rounded-xl border transition-all duration-200 ${highlight
+        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+        : 'bg-slate-50/80 border-slate-100 hover:border-slate-200'
+        }`}
       variants={itemVariants}
     >
       <div className={`p-2.5 rounded-lg ${highlight ? 'bg-blue-100' : 'bg-white'} shadow-sm`}>
@@ -672,52 +671,52 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         return (
           <motion.div className="space-y-5" variants={containerVariants} initial="hidden" animate="visible" exit="exit">
             {/* Recipient Risk Warning based on their actual profile */}
-            {recipientProfileData?.params && (recipientProfileData.params.recipientBlacklistStatus || 
-              recipientProfileData.params.fraudComplaintsCount > 0 || 
+            {recipientProfileData?.params && (recipientProfileData.params.recipientBlacklistStatus ||
+              recipientProfileData.params.fraudComplaintsCount > 0 ||
               recipientProfileData.params.pastFraudulentBehavior > 0 ||
               recipientProfileData.params.recipientVerificationStatus === 'unverified' ||
               (recipientProfileData.params.socialTrustScore && recipientProfileData.params.socialTrustScore < 30)) && (
-              <motion.div 
-                className="p-4 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl border border-red-200"
-                variants={itemVariants}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-red-100 rounded-lg flex-shrink-0">
-                    <ShieldAlert className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-red-700 flex items-center gap-2">
-                      <UserX className="w-4 h-4" />
-                      High Risk Recipient Detected
-                    </p>
-                    <div className="text-xs text-red-600 mt-1 space-y-0.5">
-                      {recipientProfileData.params.recipientBlacklistStatus && (
-                        <p>• Recipient is on a blacklist</p>
-                      )}
-                      {recipientProfileData.params.fraudComplaintsCount > 0 && (
-                        <p>• {recipientProfileData.params.fraudComplaintsCount} fraud complaints filed against recipient</p>
-                      )}
-                      {recipientProfileData.params.pastFraudulentBehavior > 0 && (
-                        <p>• {recipientProfileData.params.pastFraudulentBehavior} past fraud flags on account</p>
-                      )}
-                      {recipientProfileData.params.recipientVerificationStatus === 'unverified' && (
-                        <p>• Recipient account is unverified</p>
-                      )}
-                      {recipientProfileData.params.socialTrustScore && recipientProfileData.params.socialTrustScore < 30 && (
-                        <p>• Low trust score ({recipientProfileData.params.socialTrustScore}/100)</p>
-                      )}
-                      {recipientProfileData.params.accountAge && recipientProfileData.params.accountAge < 30 && (
-                        <p>• Account is only {recipientProfileData.params.accountAge} days old</p>
-                      )}
+                <motion.div
+                  className="p-4 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl border border-red-200"
+                  variants={itemVariants}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-red-100 rounded-lg flex-shrink-0">
+                      <ShieldAlert className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-red-700 flex items-center gap-2">
+                        <UserX className="w-4 h-4" />
+                        High Risk Recipient Detected
+                      </p>
+                      <div className="text-xs text-red-600 mt-1 space-y-0.5">
+                        {recipientProfileData.params.recipientBlacklistStatus && (
+                          <p>• Recipient is on a blacklist</p>
+                        )}
+                        {recipientProfileData.params.fraudComplaintsCount > 0 && (
+                          <p>• {recipientProfileData.params.fraudComplaintsCount} fraud complaints filed against recipient</p>
+                        )}
+                        {recipientProfileData.params.pastFraudulentBehavior > 0 && (
+                          <p>• {recipientProfileData.params.pastFraudulentBehavior} past fraud flags on account</p>
+                        )}
+                        {recipientProfileData.params.recipientVerificationStatus === 'unverified' && (
+                          <p>• Recipient account is unverified</p>
+                        )}
+                        {recipientProfileData.params.socialTrustScore && recipientProfileData.params.socialTrustScore < 30 && (
+                          <p>• Low trust score ({recipientProfileData.params.socialTrustScore}/100)</p>
+                        )}
+                        {recipientProfileData.params.accountAge && recipientProfileData.params.accountAge < 30 && (
+                          <p>• Account is only {recipientProfileData.params.accountAge} days old</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
 
             {/* Loading state while checking recipient profile */}
             {checkingRecipient && (
-              <motion.div 
+              <motion.div
                 className="flex items-center justify-center gap-2 py-2"
                 variants={itemVariants}
               >
@@ -727,29 +726,29 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             )}
 
             {/* Recipient Profile Summary (if available and safe) */}
-            {!checkingRecipient && recipientProfileData?.params && 
-              !recipientProfileData.params.recipientBlacklistStatus && 
-              recipientProfileData.params.fraudComplaintsCount === 0 && 
+            {!checkingRecipient && recipientProfileData?.params &&
+              !recipientProfileData.params.recipientBlacklistStatus &&
+              recipientProfileData.params.fraudComplaintsCount === 0 &&
               recipientProfileData.params.socialTrustScore >= 50 && (
-              <motion.div 
-                className="p-3 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200"
-                variants={itemVariants}
-              >
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-emerald-700">Verified Recipient</p>
-                    <p className="text-xs text-emerald-600">
-                      Trust Score: {recipientProfileData.params.socialTrustScore}/100 • 
-                      Account Age: {recipientProfileData.params.accountAge || '?'} days
-                    </p>
+                <motion.div
+                  className="p-3 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl border border-emerald-200"
+                  variants={itemVariants}
+                >
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-emerald-700">Verified Recipient</p>
+                      <p className="text-xs text-emerald-600">
+                        Trust Score: {recipientProfileData.params.socialTrustScore}/100 •
+                        Account Age: {recipientProfileData.params.accountAge || '?'} days
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
+                </motion.div>
+              )}
 
             {/* Amount Display - Prominent */}
-            <motion.div 
+            <motion.div
               className="text-center py-6 bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50 rounded-2xl border border-blue-100"
               variants={itemVariants}
             >
@@ -768,7 +767,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             </div>
 
             {/* AI Protection Badge */}
-            <motion.div 
+            <motion.div
               className="flex items-center gap-3 p-3 bg-emerald-50 rounded-xl border border-emerald-100"
               variants={itemVariants}
             >
@@ -813,7 +812,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
       case 'risk_review':
         return (
-          <motion.div 
+          <motion.div
             className="space-y-5"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -835,8 +834,8 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             <div className="flex flex-col items-center py-4">
               <RiskProgressRing score={riskAnalysis?.risk_score} level={riskAnalysis?.risk_level} />
               <div className="flex items-center gap-2 mt-4">
-                <Badge 
-                  variant="outline" 
+                <Badge
+                  variant="outline"
                   className={`px-4 py-1.5 text-sm font-semibold ${getRiskBadgeColor(riskAnalysis?.risk_level)}`}
                 >
                   {riskAnalysis?.risk_level === 'low' && <ShieldCheck className="w-4 h-4 mr-1.5" />}
@@ -894,10 +893,9 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             )}
 
             {/* Transaction Summary */}
-            <div className={`p-4 rounded-xl border ${getRiskBgColor(riskAnalysis?.risk_level)} ${
-              riskAnalysis?.risk_level === 'high' ? 'border-red-200' : 
+            <div className={`p-4 rounded-xl border ${getRiskBgColor(riskAnalysis?.risk_level)} ${riskAnalysis?.risk_level === 'high' ? 'border-red-200' :
               riskAnalysis?.risk_level === 'medium' ? 'border-amber-200' : 'border-emerald-200'
-            }`}>
+              }`}>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-slate-500">Amount</p>
@@ -920,14 +918,13 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
                 </p>
                 <div className="space-y-2 max-h-[100px] overflow-y-auto pr-2">
                   {riskAnalysis.factors.map((factor, idx) => (
-                    <div 
-                      key={idx} 
+                    <div
+                      key={idx}
                       className="flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-100"
                     >
-                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${
-                        riskAnalysis?.risk_level === 'high' ? 'bg-red-500' : 
+                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 ${riskAnalysis?.risk_level === 'high' ? 'bg-red-500' :
                         riskAnalysis?.risk_level === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`} />
+                        }`} />
                       <p className="text-sm text-slate-600">{factor}</p>
                     </div>
                   ))}
@@ -940,11 +937,10 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
               {riskAnalysis?.risk_level !== 'high' ? (
                 <Button
                   onClick={handleConfirm}
-                  className={`w-full h-12 rounded-xl font-semibold shadow-lg transition-all ${
-                    riskAnalysis?.risk_level === 'low' 
-                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/25' 
-                      : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-500/25'
-                  }`}
+                  className={`w-full h-12 rounded-xl font-semibold shadow-lg transition-all ${riskAnalysis?.risk_level === 'low'
+                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/25'
+                    : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 shadow-amber-500/25'
+                    }`}
                 >
                   <ShieldCheck className="w-5 h-5 mr-2" />
                   {riskAnalysis?.risk_level === 'low' ? 'Proceed Safely' : 'Proceed with Caution'}
@@ -982,7 +978,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
       case 'blocked':
         return (
-          <motion.div 
+          <motion.div
             className="flex flex-col items-center py-4"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -994,7 +990,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             <p className="text-slate-500 text-center text-sm mb-4">
               For your protection, this transaction has been blocked
             </p>
-            
+
             <div className="w-full p-4 bg-red-50 rounded-xl border border-red-100 mb-4">
               <p className="text-xs font-medium text-red-700 mb-2">Reasons:</p>
               <div className="space-y-1">
@@ -1006,7 +1002,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
                 ))}
               </div>
             </div>
-            
+
             <div className="flex gap-3 w-full">
               <Button
                 onClick={proceedAnyway}
@@ -1015,8 +1011,8 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
               >
                 Override
               </Button>
-              <Button 
-                onClick={onClose} 
+              <Button
+                onClick={onClose}
                 className="flex-1 h-11 rounded-xl bg-slate-800 hover:bg-slate-900"
               >
                 Cancel
@@ -1027,7 +1023,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
       case 'processing':
         return (
-          <motion.div 
+          <motion.div
             className="flex flex-col items-center justify-center py-8"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1050,12 +1046,12 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
       case 'success':
         return (
-          <motion.div 
+          <motion.div
             className="flex flex-col items-center py-4"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <motion.div 
+            <motion.div
               className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4"
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
@@ -1065,7 +1061,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             </motion.div>
             <h3 className="text-xl font-bold text-slate-800 mb-1">Payment Successful!</h3>
             <p className="text-slate-500 text-sm mb-4">Your money has been sent</p>
-            
+
             <div className="w-full p-4 bg-slate-50 rounded-xl border border-slate-100 mb-4">
               <div className="text-center mb-3">
                 <p className="text-3xl font-bold text-slate-800">₹{Number(amount).toLocaleString('en-IN')}</p>
@@ -1075,7 +1071,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
                 <span className="font-medium text-slate-700">{upiId}</span>
               </div>
             </div>
-            
+
             <Button
               onClick={onClose}
               className="w-full h-12 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-500/25"
@@ -1087,12 +1083,12 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
       case 'error':
         return (
-          <motion.div 
+          <motion.div
             className="flex flex-col items-center py-4"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <motion.div 
+            <motion.div
               className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4"
               initial={{ scale: 0, rotate: -90 }}
               animate={{ scale: 1, rotate: 0 }}
@@ -1104,13 +1100,13 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             <p className="text-slate-500 text-sm text-center mb-4">
               Something went wrong. Please try again.
             </p>
-            
+
             <div className="w-full p-4 bg-red-50 rounded-xl border border-red-100 mb-4">
               <p className="text-sm text-red-600 text-center">
                 Your account was not charged
               </p>
             </div>
-            
+
             <Button
               onClick={onClose}
               className="w-full h-12 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white rounded-xl font-semibold"
@@ -1140,27 +1136,26 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
           className="w-full max-w-md max-h-[90vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col"
         >
           {/* Header */}
-          <div className={`relative overflow-hidden flex-shrink-0 ${
-            currentStep === 'success' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
+          <div className={`relative overflow-hidden flex-shrink-0 ${currentStep === 'success' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
             currentStep === 'error' ? 'bg-gradient-to-r from-red-500 to-red-600' :
-            currentStep === 'blocked' ? 'bg-gradient-to-r from-red-500 to-rose-600' :
-            currentStep === 'risk_review' && riskAnalysis?.risk_level === 'high' ? 'bg-gradient-to-r from-red-500 to-rose-600' : 
-            currentStep === 'risk_review' && riskAnalysis?.risk_level === 'medium' ? 'bg-gradient-to-r from-amber-500 to-orange-500' :
-            currentStep === 'risk_review' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
-            'bg-gradient-to-r from-blue-500 to-indigo-600'
-          }`}>
+              currentStep === 'blocked' ? 'bg-gradient-to-r from-red-500 to-rose-600' :
+                currentStep === 'risk_review' && riskAnalysis?.risk_level === 'high' ? 'bg-gradient-to-r from-red-500 to-rose-600' :
+                  currentStep === 'risk_review' && riskAnalysis?.risk_level === 'medium' ? 'bg-gradient-to-r from-amber-500 to-orange-500' :
+                    currentStep === 'risk_review' ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' :
+                      'bg-gradient-to-r from-blue-500 to-indigo-600'
+            }`}>
             {/* Decorative elements */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
-            
+
             <div className="relative p-5 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-xl">
                   {currentStep === 'success' ? <CheckCircle className="w-5 h-5 text-white" /> :
-                   currentStep === 'error' || currentStep === 'blocked' ? <XCircle className="w-5 h-5 text-white" /> :
-                   currentStep === 'risk_review' ? <Shield className="w-5 h-5 text-white" /> :
-                   currentStep === 'processing' ? <Loader2 className="w-5 h-5 text-white animate-spin" /> :
-                   <Send className="w-5 h-5 text-white" />}
+                    currentStep === 'error' || currentStep === 'blocked' ? <XCircle className="w-5 h-5 text-white" /> :
+                      currentStep === 'risk_review' ? <Shield className="w-5 h-5 text-white" /> :
+                        currentStep === 'processing' ? <Loader2 className="w-5 h-5 text-white animate-spin" /> :
+                          <Send className="w-5 h-5 text-white" />}
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-white">
@@ -1191,7 +1186,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
               </Button>
             </div>
           </div>
-          
+
           {/* Content */}
           <div className="p-6 overflow-y-auto flex-1">
             {renderContent()}

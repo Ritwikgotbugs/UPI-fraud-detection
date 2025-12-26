@@ -5,8 +5,10 @@ import { signOut } from "firebase/auth";
 import {
   HelpCircle as Help,
   History,
+  IndianRupee,
   LayoutDashboard,
   LogOut,
+  QrCode,
   Send,
   Settings,
   Shield,
@@ -30,10 +32,10 @@ export default function SidebarContent() {
       console.error("Sign-Out Error:", error);
     }
   };
-  
+
   const mainNavItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", badge: null },
-    { icon: Send, label: "Pay", path: "/send-money", badge: null },
+    { icon: IndianRupee, label: "Send money", path: "/send-money", badge: null },
     { icon: History, label: "Activity", path: "/transactions", badge: null },
   ];
 
@@ -78,19 +80,19 @@ export default function SidebarContent() {
                 <div
                   className={cn(
                     "relative group flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200",
-                    isActive(item.path) 
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25" 
+                    isActive(item.path)
+                      ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25"
                       : "text-slate-600 hover:bg-slate-100"
                   )}
                 >
                   {isActive(item.path) && (
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-full" />
                   )}
-                  
+
                   <div className={cn(
                     "relative flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
-                    isActive(item.path) 
-                      ? "bg-white/20" 
+                    isActive(item.path)
+                      ? "bg-white/20"
                       : "bg-slate-100 group-hover:bg-blue-100"
                   )}>
                     <item.icon className={cn(
@@ -98,21 +100,21 @@ export default function SidebarContent() {
                       isActive(item.path) ? "text-white" : "text-slate-500 group-hover:text-blue-600"
                     )} />
                   </div>
-                  
+
                   <span className={cn(
                     "flex-1 font-medium text-sm",
                     isActive(item.path) ? "text-white" : "text-slate-700"
                   )}>
                     {item.label}
                   </span>
-                  
+
                   {item.badge && (
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={cn(
                         "text-[10px] px-1.5 py-0 h-5 font-semibold",
-                        isActive(item.path) 
-                          ? "bg-white/20 text-white border-white/30" 
+                        isActive(item.path)
+                          ? "bg-white/20 text-white border-white/30"
                           : "bg-blue-100 text-blue-600 border-blue-200"
                       )}
                     >
@@ -133,19 +135,19 @@ export default function SidebarContent() {
                 <div
                   className={cn(
                     "relative group flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200",
-                    isActive(item.path) 
-                      ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25" 
+                    isActive(item.path)
+                      ? "bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg shadow-blue-500/25"
                       : "text-slate-600 hover:bg-slate-100"
                   )}
                 >
                   {isActive(item.path) && (
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-full" />
                   )}
-                  
+
                   <div className={cn(
                     "relative flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
-                    isActive(item.path) 
-                      ? "bg-white/20" 
+                    isActive(item.path)
+                      ? "bg-white/20"
                       : "bg-slate-100 group-hover:bg-blue-100"
                   )}>
                     <item.icon className={cn(
@@ -153,21 +155,21 @@ export default function SidebarContent() {
                       isActive(item.path) ? "text-white" : "text-slate-500 group-hover:text-blue-600"
                     )} />
                   </div>
-                  
+
                   <span className={cn(
                     "flex-1 font-medium text-sm",
                     isActive(item.path) ? "text-white" : "text-slate-700"
                   )}>
                     {item.label}
                   </span>
-                  
+
                   {item.badge && (
-                    <Badge 
-                      variant="outline" 
+                    <Badge
+                      variant="outline"
                       className={cn(
                         "text-[10px] px-1.5 py-0 h-5 font-semibold",
-                        isActive(item.path) 
-                          ? "bg-white/20 text-white border-white/30" 
+                        isActive(item.path)
+                          ? "bg-white/20 text-white border-white/30"
                           : "bg-blue-100 text-blue-600 border-blue-200"
                       )}
                     >
@@ -200,9 +202,9 @@ export default function SidebarContent() {
             </p>
           </div>
         </div>
-        
-        <Button 
-          variant="ghost" 
+
+        <Button
+          variant="ghost"
           onClick={handleSignOut}
           className="w-full justify-center gap-2 h-9 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg font-medium text-sm transition-all duration-200"
         >

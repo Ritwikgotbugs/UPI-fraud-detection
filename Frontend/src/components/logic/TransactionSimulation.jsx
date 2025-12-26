@@ -74,7 +74,22 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [recipientProfileData, setRecipientProfileData] = useState(null)
   const [checkingRecipient, setCheckingRecipient] = useState(true)
+  const [activeRules, setActiveRules] = useState([]);
+  const [isAdminBlocked, setIsAdminBlocked] = useState(false);
   const { refreshData, userData } = useAuth();
+
+  useEffect(() => {
+    const fetchRules = async () => {
+      try {
+        const rulesSnap = await getDocs(collection(db, 'rules'));
+        const rules = rulesSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.enabled);
+        setActiveRules(rules);
+      } catch (e) {
+        console.error("Error fetching rules:", e);
+      }
+    };
+    fetchRules();
+  }, []);
 
 
   useEffect(() => {
@@ -348,6 +363,64 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
 
+  const evaluateRules = (analysisResults = riskAnalysis) => {
+    if (!activeRules.length) return { block: false, rules: [] };
+
+    const triggeredBlocks = [];
+    const triggeredFlags = [];
+
+    const params = recipientProfileData?.params || {};
+    const context = {
+      amount: Number(amount),
+      hour: new Date().getHours(),
+      risk_score: analysisResults?.risk_score || 0,
+      social_trust_score: Number(params.socialTrustScore || 0),
+      recipient_blacklist_status: Number(params.recipientBlacklistStatus || 0),
+      fraud_complaints_count: Number(params.fraudComplaintsCount || 0),
+      account_age: Number(params.accountAge || 0),
+      vpn_proxy_usage: Number(params.vpnProxyUsage || 0)
+    };
+
+    activeRules.forEach(rule => {
+      if (rule.enabled === false) return;
+
+      let isTriggered = false;
+
+      // New multi-condition support (LOGICAL AND)
+      if (rule.conditions && Array.isArray(rule.conditions)) {
+        isTriggered = rule.conditions.every(cond => {
+          const val = context[cond.field];
+          const target = cond.value;
+          const op = cond.operator;
+          if (op === '>') return val > target;
+          if (op === '<') return val < target;
+          if (op === '==') return val == target;
+          return false;
+        });
+      }
+      // Legacy single condition support
+      else if (rule.condition) {
+        const val = context[rule.condition.field];
+        const target = rule.condition.value;
+        const op = rule.condition.operator;
+        if (op === '>') isTriggered = val > target;
+        else if (op === '<') isTriggered = val < target;
+        else if (op === '==') isTriggered = val == target;
+      }
+
+      if (isTriggered) {
+        if (rule.action === 'block') triggeredBlocks.push(rule.name);
+        else triggeredFlags.push({ name: rule.name, modifier: rule.risk_modifier || 20 });
+      }
+    });
+
+    return {
+      block: triggeredBlocks.length > 0,
+      blockReasons: triggeredBlocks,
+      flags: triggeredFlags
+    };
+  };
+
   const analyzeRisk = async () => {
     setIsAnalyzing(true);
     try {
@@ -436,6 +509,43 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
           }
         }
 
+        const ruleCheck = evaluateRules(analysis);
+        const totalModifier = ruleCheck.flags.reduce((sum, f) => sum + f.modifier, 0);
+
+        analysis = {
+          ...analysis,
+          risk_score: Math.min(100, (analysis.risk_score || 0) + totalModifier),
+          factors: [...ruleCheck.flags.map(f => `🚩 RULE: ${f.name}`), ...(analysis.factors || [])],
+        };
+
+        if (ruleCheck.block) {
+          analysis.should_block = true;
+          analysis.factors = [`🚫 BLOCKED BY ADMIN RULE: ${ruleCheck.blockReasons[0]}`, ...analysis.factors];
+        }
+
+        // Alerting for Security Events (Blocks or Flags)
+        if (analysis.should_block || ruleCheck.flags.length > 0) {
+          try {
+            addDoc(collection(db, 'alerts'), {
+              type: analysis.should_block ? 'BLOCK' : 'FLAG',
+              severity: analysis.should_block ? 'high' : 'medium',
+              title: analysis.should_block ? 'Transaction Blocked' : 'Security Flag Raised',
+              message: analysis.should_block
+                ? `Transaction of ₹${amount} was blocked by security rules.`
+                : `Security warning raised for ₹${amount} transaction.`,
+              details: analysis.should_block
+                ? ruleCheck.blockReasons.join(', ')
+                : ruleCheck.flags.map(f => f.name).join(', '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              risk_score: analysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+          } catch (e) { }
+        }
+
         setRiskAnalysis(analysis);
         setCurrentStep('risk_review');
       } else {
@@ -456,6 +566,38 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
   const handleConfirm = async () => {
+
+    // 0. CHECK RULES FIRST - REAL TIME ENFORCEMENT
+    const ruleCheck = evaluateRules();
+    if (ruleCheck.block) {
+      setIsAdminBlocked(true);
+
+      // Create Admin Alert
+      try {
+        await addDoc(collection(db, 'alerts'), {
+          type: 'BLOCK',
+          severity: 'high',
+          title: 'Transaction Blocked',
+          message: `Transaction of ₹${amount} from ${senderUPI} was blocked by security rules.`,
+          details: ruleCheck.blockReasons.join(', '),
+          transaction_amount: Number(amount),
+          sender_upi: senderUPI,
+          recipient_upi: upiId,
+          createdAt: serverTimestamp(),
+          read: false
+        });
+      } catch (e) {
+        console.error("Alert generation failed:", e);
+      }
+
+      setRiskAnalysis(prev => ({
+        ...prev,
+        should_block: true,
+        factors: [...(prev?.factors || []), ...ruleCheck.blockReasons.map(r => `🚫 BLOCKED BY ADMIN RULE: ${r}`)]
+      }));
+      setCurrentStep('blocked');
+      return;
+    }
 
     if (!riskAnalysis) {
       await analyzeRisk();
@@ -529,6 +671,13 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
   const proceedAnyway = async () => {
+    // Safety check: Don't allow override if an admin rule blocks it
+    const ruleCheck = evaluateRules();
+    if (ruleCheck.block) {
+      setIsAdminBlocked(true);
+      setCurrentStep('blocked');
+      return;
+    }
 
     setIsLoading(true);
     setCurrentStep("processing");
@@ -1004,18 +1153,20 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
             </div>
 
             <div className="flex gap-3 w-full">
-              <Button
-                onClick={proceedAnyway}
-                variant="outline"
-                className="flex-1 h-11 rounded-xl border-red-200 text-red-600 hover:bg-red-50"
-              >
-                Override
-              </Button>
+              {!isAdminBlocked && (
+                <Button
+                  onClick={proceedAnyway}
+                  variant="outline"
+                  className="flex-1 h-11 rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  Override
+                </Button>
+              )}
               <Button
                 onClick={onClose}
-                className="flex-1 h-11 rounded-xl bg-slate-800 hover:bg-slate-900"
+                className={`h-11 rounded-xl ${isAdminBlocked ? 'w-full bg-red-600 hover:bg-red-700' : 'flex-1 bg-slate-800 hover:bg-slate-900'}`}
               >
-                Cancel
+                {isAdminBlocked ? 'Understood' : 'Cancel'}
               </Button>
             </div>
           </motion.div>

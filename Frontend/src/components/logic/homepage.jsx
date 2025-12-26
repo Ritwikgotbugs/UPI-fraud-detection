@@ -17,6 +17,30 @@ import QRCode from "react-qr-code";
 import { QrReader } from "react-qr-reader";
 import { Scan, QrCode, Camera, Minimize2 } from 'lucide-react';
 
+const SafeQrReader = (props) => {
+  useEffect(() => {
+    return () => {
+      const stopAllTracks = () => {
+        const videos = document.querySelectorAll('video');
+        videos.forEach(video => {
+          if (video.srcObject instanceof MediaStream) {
+            video.srcObject.getTracks().forEach(track => {
+              track.stop();
+            });
+            video.srcObject = null;
+          }
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        });
+      };
+      stopAllTracks();
+      setTimeout(stopAllTracks, 100);
+    };
+  }, []);
+  return <QrReader {...props} />;
+};
+
 
 export default function Homepage() {
   const [showPopup, setShowPopup] = useState(false);
@@ -28,6 +52,42 @@ export default function Homepage() {
   const [remarks, setRemarks] = useState()
   const [showSimulation, setShowSimulation] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [camActive, setCamActive] = useState(false);
+
+  useEffect(() => {
+    if (showScanner) {
+      setCamActive(true);
+    } else {
+      setCamActive(false);
+    }
+  }, [showScanner]);
+
+  useEffect(() => {
+    return () => {
+      if (window._activeStreams) {
+        window._activeStreams.forEach(stream => {
+          stream.getTracks().forEach(t => t.stop());
+        });
+        window._activeStreams.clear();
+      }
+    };
+  }, []);
+
+  const handleCloseScanner = () => {
+    setCamActive(false);
+    setShowScanner(false);
+
+    // Nuclear option: stop ALL captured streams
+    if (window._activeStreams) {
+      window._activeStreams.forEach(stream => {
+        stream.getTracks().forEach(track => {
+          track.stop();
+          console.log("Explicitly stopped track:", track.label);
+        });
+      });
+      window._activeStreams.clear();
+    }
+  };
 
 
   useEffect(() => {
@@ -42,11 +102,18 @@ export default function Homepage() {
   }, [showPopup]);
 
   const remarkOptions = [
-    { value: "first_time", label: "First-time Recipient" },
-    { value: "recurring", label: "Recurring Payment" },
-    { value: "urgent", label: "Urgent/Emergency" },
-    { value: "high_value", label: "High-Value Transfer" },
-    { value: "unknown", label: "Unknown Contact" },
+    { value: "shopping", label: "🛒 Shopping & Retail" },
+    { value: "emergency", label: "🚨 Emergency / Medical" },
+    { value: "salary", label: "💰 Salary / Professional" },
+    { value: "rent", label: "🏠 Home Rent / Utilities" },
+    { value: "charity", label: "🤝 Charity & Donations" },
+    { value: "recurring", label: "🔄 Subscriptions / SIP" },
+    { value: "family", label: "👨‍👩‍👧 Family & Friends" },
+    { value: "business", label: "🏢 Business Payment" },
+    { value: "loan", label: "🏦 Loan Repayment / EMI" },
+    { value: "high_value", label: "💎 High-End Purchase" },
+    { value: "investment", label: "📈 Stocks & Mutual Funds" },
+    { value: "travel", label: "✈️ Travel & Vacation" },
   ];
 
   // const recentTransactions = [
@@ -64,6 +131,31 @@ export default function Homepage() {
   };
 
   const navigate = useNavigate();
+
+  const handleAcknowledgeBlock = async () => {
+    if (!blockedRuleData) return;
+
+    try {
+      await addDoc(collection(db, 'alerts'), {
+        type: 'BLOCK',
+        severity: 'high',
+        title: 'User Acknowledged Block',
+        message: `User attempted to send ₹${amount} but was stopped by rule "${blockedRuleData.name}".`,
+        details: blockedRuleData.conditions ?
+          blockedRuleData.conditions.map(c => `${c.field} ${c.operator} ${c.value}`).join(' AND ') :
+          `${blockedRuleData.condition?.field} ${blockedRuleData.condition?.operator} ${blockedRuleData.condition?.value}`,
+        transaction_amount: Number(amount),
+        sender_upi: userData?.upiId || upiId || 'Unknown',
+        recipient_upi: recipientUpiId || 'Unknown',
+        createdAt: serverTimestamp(),
+        read: false
+      });
+    } catch (e) {
+      console.error("Failed to log acknowledgment:", e);
+    }
+
+    setBlockedRuleData(null);
+  };
   const handleSendMoney = () => {
 
     if (Number(amount) > balance) {
@@ -80,6 +172,50 @@ export default function Homepage() {
       return;
     }
     setSelfTransferError(false);
+
+    // Unified Rules Check
+    const context = {
+      amount: Number(amount),
+      hour: new Date().getHours(),
+    };
+
+    const blockingRule = activeRules.find(rule => {
+      if (rule.action !== 'block' || rule.enabled === false) return false;
+
+      // New multi-condition support
+      if (rule.conditions && Array.isArray(rule.conditions)) {
+        // Only evaluate if ALL fields in the rule are available in the basic homepage context
+        // Otherwise, skip pre-check and let the full simulation handle it
+        const canEvaluate = rule.conditions.every(c => context[c.field] !== undefined);
+        if (!canEvaluate) return false;
+
+        return rule.conditions.every(cond => {
+          const val = context[cond.field];
+          const target = cond.value;
+          const op = cond.operator;
+          if (op === '>') return val > target;
+          if (op === '<') return val < target;
+          if (op === '==') return val == target;
+          return false;
+        });
+      }
+
+      // Legacy single condition support
+      const val = context[rule.condition?.field];
+      if (typeof val === 'undefined') return false;
+
+      const target = rule.condition.value;
+      const op = rule.condition.operator;
+      if (op === '>') return val > target;
+      if (op === '<') return val < target;
+      if (op === '==') return val == target;
+      return false;
+    });
+
+    if (blockingRule) {
+      setBlockedRuleData(blockingRule);
+      return;
+    }
 
     setShowSimulation(true);
   };
@@ -98,12 +234,58 @@ export default function Homepage() {
   const [sendStep, setSendStep] = useState('recipient'); // 'recipient' | 'amount'
   const [showMyQr, setShowMyQr] = useState(false);
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [activeRules, setActiveRules] = useState([]);
+  const [blockedRuleData, setBlockedRuleData] = useState(null);
   const scanLockRef = useRef(false);
+
+  useEffect(() => {
+    const fetchRules = async () => {
+      try {
+        const rulesSnap = await getDocs(collection(db, 'rules'));
+        setActiveRules(rulesSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.enabled));
+      } catch (e) { }
+    };
+    fetchRules();
+  }, []);
+
+  // Manual camera cleanup failsafe
+  useEffect(() => {
+    if (!showScanner) {
+      const stopCamera = () => {
+        const videos = document.querySelectorAll('video');
+        videos.forEach(video => {
+          if (video.srcObject instanceof MediaStream) {
+            video.srcObject.getTracks().forEach(track => {
+              track.stop();
+              console.log("Forced stop track:", track.label);
+            });
+            video.srcObject = null;
+          }
+        });
+      };
+
+      // Run immediately and also after a short delay to catch any late initializations
+      stopCamera();
+      const timer = setTimeout(stopCamera, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showScanner]);
 
 
   const startScanning = () => {
+    // Clear any leftover tracks before starting
+    try {
+      document.querySelectorAll('video').forEach(v => {
+        if (v.srcObject instanceof MediaStream) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+          v.srcObject = null;
+        }
+      });
+    } catch (e) { }
+
     scanLockRef.current = false;
     setShowScanner(true);
+    setCamActive(true);
   };
 
 
@@ -366,7 +548,7 @@ export default function Homepage() {
       scanLockRef.current = true; // Lock immediately
       const text = result?.text || result;
       if (text) {
-        setShowScanner(false);
+        handleCloseScanner();
         // If email, try to find associated UPI
         if (text.includes('@') && !text.includes('@upi')) {
           try {
@@ -485,89 +667,87 @@ export default function Homepage() {
         </motion.div>
       ) : (
         <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-          {/* Desktop Sidebar */}
-          <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
-            {/* My QR Code Modal */}
-            <AnimatePresence>
-              {showMyQr && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowMyQr(false)}>
-                  <motion.div
-                    initial={{ scale: 0.9, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.9, opacity: 0 }}
-                    className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-bold text-slate-800">My QR Code</h3>
-                      <Button variant="ghost" size="icon" onClick={() => setShowMyQr(false)} className="hover:bg-slate-100 rounded-full">
-                        <X className="h-5 w-5 text-slate-500" />
-                      </Button>
+          {/* My QR Code Modal */}
+          <AnimatePresence>
+            {showMyQr && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowMyQr(false)}>
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.9, opacity: 0 }}
+                  className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-bold text-slate-800">My QR Code</h3>
+                    <Button variant="ghost" size="icon" onClick={() => setShowMyQr(false)} className="hover:bg-slate-100 rounded-full">
+                      <X className="h-5 w-5 text-slate-500" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="p-4 bg-white rounded-xl shadow-lg border border-slate-100">
+                      <QRCode
+                        value={userData?.email || user?.email || ""}
+                        size={200}
+                        level="H"
+                      />
                     </div>
-                    <div className="flex flex-col items-center gap-6">
-                      <div className="p-4 bg-white rounded-xl shadow-lg border border-slate-100">
-                        <QRCode
-                          value={userData?.email || user?.email || ""}
-                          size={200}
-                          level="H"
-                        />
-                      </div>
-                      <div className="text-center">
-                        <p className="font-semibold text-slate-800">{userData?.name || "User"}</p>
-                        <p className="text-sm text-slate-500">{userData?.email || user?.email}</p>
-                        <p className="text-xs text-blue-600 mt-1 font-medium">{userData?.upiId || "UPI ID Loading..."}</p>
-                      </div>
-                      <p className="text-xs text-center text-slate-400 max-w-[80%]">
-                        Scan this QR code to quickly fetch account details and send money safely.
-                      </p>
+                    <div className="text-center">
+                      <p className="font-semibold text-slate-800">{userData?.name || "User"}</p>
+                      <p className="text-sm text-slate-500">{userData?.email || user?.email}</p>
+                      <p className="text-xs text-blue-600 mt-1 font-medium">{userData?.upiId || "UPI ID Loading..."}</p>
                     </div>
-                  </motion.div>
-                </div>
-              )}
-            </AnimatePresence>
+                    <p className="text-xs text-center text-slate-400 max-w-[80%]">
+                      Scan this QR code to quickly fetch account details and send money safely.
+                    </p>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
-            {/* QR Scanner Modal */}
-            <AnimatePresence>
-              {showScanner && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={() => setShowScanner(false)}>
-                  <div className="w-full max-w-md h-full flex flex-col relative" onClick={e => e.stopPropagation()}>
-                    <div className="absolute top-4 right-4 z-10">
-                      <Button variant="ghost" size="icon" onClick={() => setShowScanner(false)} className="text-white hover:bg-white/20 rounded-full">
-                        <X className="h-6 w-6" />
-                      </Button>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center items-center p-4">
-                      <h3 className="text-white font-semibold text-lg mb-8 flex items-center gap-2">
-                        <Camera className="h-5 w-5" /> Scan QR Code
-                      </h3>
-                      <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
-                        <QrReader
-                          constraints={{ facingMode: 'environment' }}
-                          onResult={(result, error) => {
-                            if (result) handleScanResult(result);
-                          }}
-                          style={{ width: '100%', height: '100%' }}
-                          className="w-full h-full object-cover"
-                        />
-                        {/* Overlay Frame */}
-                        <div className="absolute inset-0 border-[30px] border-black/40 pointer-events-none">
-                          <div className="w-full h-full border-2 border-green-500/50 relative">
-                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500 -mt-1 -ml-1"></div>
-                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500 -mt-1 -mr-1"></div>
-                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500 -mb-1 -ml-1"></div>
-                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500 -mb-1 -mr-1"></div>
-                          </div>
-                        </div>
+          {showScanner && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={handleCloseScanner}>
+              <div className="w-full max-w-md h-full flex flex-col relative" onClick={e => e.stopPropagation()}>
+                <div className="absolute top-4 right-4 z-10">
+                  <Button variant="ghost" size="icon" onClick={handleCloseScanner} className="text-white hover:bg-white/20 rounded-full">
+                    <X className="h-6 w-6" />
+                  </Button>
+                </div>
+                <div className="flex-1 flex flex-col justify-center items-center p-4">
+                  <h3 className="text-white font-semibold text-lg mb-8 flex items-center gap-2">
+                    <Camera className="h-5 w-5" /> Scan QR Code
+                  </h3>
+                  <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
+                    {camActive && (
+                      <SafeQrReader
+                        constraints={{ video: { facingMode: 'environment' } }}
+                        onResult={(result, error) => {
+                          if (result) handleScanResult(result);
+                        }}
+                        containerStyle={{ width: '100%', height: '100%' }}
+                        videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    )}
+                    {/* Overlay Frame */}
+                    <div className="absolute inset-0 border-[30px] border-black/40 pointer-events-none">
+                      <div className="w-full h-full border-2 border-green-500/50 relative">
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-green-500 -mt-1 -ml-1"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-green-500 -mt-1 -mr-1"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-green-500 -mb-1 -ml-1"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-green-500 -mb-1 -mr-1"></div>
                       </div>
-                      <p className="text-slate-400 text-sm mt-8 text-center px-8">
-                        Align the recipient's QR code within the frame to automatically fetch their UPI details.
-                      </p>
                     </div>
                   </div>
+                  <p className="text-slate-400 text-sm mt-8 text-center px-8">
+                    Align the recipient's QR code within the frame to automatically fetch their UPI details.
+                  </p>
                 </div>
-              )}
-            </AnimatePresence>
-
+              </div>
+            </div>
+          )}
+          {/* Desktop Sidebar */}
+          <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
             <SidebarContent />
           </aside>
 
@@ -1045,6 +1225,90 @@ export default function Homepage() {
           document.body
         )
       }
+
+      {/* Blocked Rule Popup */}
+      {createPortal(
+        <AnimatePresence>
+          {blockedRuleData && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xl z-[10000] p-4"
+              onClick={() => setBlockedRuleData(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-red-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="bg-gradient-to-br from-red-500 to-rose-600 p-8 flex flex-col items-center justify-center text-white relative">
+                  <div className="absolute top-4 right-4">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setBlockedRuleData(null)}
+                      className="text-white/80 hover:text-white hover:bg-white/20 rounded-full"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-4 backdrop-blur-md border border-white/30 animate-pulse">
+                    <ShieldAlert className="h-10 w-10 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-black text-center uppercase tracking-tight">Security Block</h2>
+                  <p className="text-red-100 text-sm font-medium mt-1">Safety First Policy Applied</p>
+                </div>
+
+                <div className="p-8">
+                  <div className="bg-red-50 rounded-2xl p-6 border border-red-100 mb-6">
+                    <p className="text-xs font-bold text-red-800 uppercase tracking-widest mb-1 opacity-60">Violated Policy</p>
+                    <p className="text-lg font-bold text-red-900 leading-tight">{blockedRuleData.name}</p>
+                  </div>
+
+                  <div className="space-y-4 mb-8">
+                    <div className="flex items-center gap-3 text-slate-600">
+                      <div className="p-2 bg-slate-100 rounded-lg">
+                        <IndianRupee className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Transaction Amount</p>
+                        <p className="text-sm font-bold text-slate-700">₹{amount}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 text-slate-600">
+                      <div className="p-2 bg-slate-100 rounded-lg">
+                        <AlertTriangle className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-slate-400">Restriction Reason</p>
+                        <p className="text-sm text-slate-700 leading-relaxed font-medium">
+                          This transaction exceeds the administrative safety limits set for your current account profile.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleAcknowledgeBlock}
+                    className="w-full h-14 bg-slate-900 hover:bg-black text-white rounded-2xl font-bold text-lg shadow-xl shadow-slate-200"
+                  >
+                    I Understand
+                  </Button>
+
+                  <p className="text-center text-[10px] text-slate-400 mt-4 font-medium px-4">
+                    If you believe this is an error, please contact your administrative security officer.
+                  </p>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div >
   );
 }

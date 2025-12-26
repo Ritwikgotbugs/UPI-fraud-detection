@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, query, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -30,6 +30,7 @@ import {
   Trash2,
   TrendingUp,
   Users,
+  X,
   Zap
 } from 'lucide-react';
 import { useEffect, useState } from "react";
@@ -41,6 +42,24 @@ import SidebarContent from "./SidebarContent";
 const API_BASE = 'https://rxcq.pythonanywhere.com';
 
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899'];
+
+const getRiskIcon = (severity) => {
+  switch (severity?.toLowerCase()) {
+    case 'high': return <ShieldAlert className="h-5 w-5" />;
+    case 'medium': return <AlertTriangle className="h-5 w-5" />;
+    case 'low': return <ShieldCheck className="h-5 w-5" />;
+    default: return <Shield className="h-5 w-5" />;
+  }
+};
+
+const getRiskColor = (severity) => {
+  switch (severity?.toLowerCase()) {
+    case 'high': return 'bg-red-100 text-red-700 border-red-200';
+    case 'medium': return 'bg-amber-100 text-amber-700 border-amber-200';
+    case 'low': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+    default: return 'bg-slate-100 text-slate-700 border-slate-200';
+  }
+};
 
 
 const SAMPLE_DASHBOARD_DATA = {
@@ -366,9 +385,7 @@ const AdminDashboard = () => {
 
   const [newRule, setNewRule] = useState({
     name: '',
-    field: 'amount',
-    operator: '>',
-    value: '',
+    conditions: [{ field: 'amount', operator: '>', value: '' }],
     action: 'flag',
     risk_modifier: 20
   });
@@ -417,14 +434,40 @@ const AdminDashboard = () => {
       if (rulesRes?.ok) {
         setRules((await rulesRes.json()).rules || []);
       } else {
-        setRules([
-          { id: 1, name: 'Block very high value', condition: { field: 'amount', operator: '>', value: 100000 }, action: 'block', enabled: true },
-          { id: 2, name: 'Flag late night high value', condition: { field: 'amount', operator: '>', value: 10000 }, action: 'flag', enabled: true }
-        ]);
+        try {
+          const rulesSnap = await getDocs(collection(db, 'rules'));
+          if (!rulesSnap.empty) {
+            setRules(rulesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          } else {
+            setRules([
+              { id: 1, name: 'Block Excessive Transaction Amount', condition: { field: 'amount', operator: '>', value: 50000 }, action: 'block', enabled: true },
+              { id: 2, name: 'Flag Late Night Activity (2AM-5AM)', condition: { field: 'hour', operator: '>', value: 1 }, action: 'flag', enabled: true },
+              { id: 3, name: 'New Account & High Value Protection', condition: { field: 'account_age', operator: '<', value: 7 }, action: 'block', enabled: true },
+              { id: 4, name: 'Strict Blacklist Enforcement', condition: { field: 'recipient_blacklist_status', operator: '==', value: 1 }, action: 'block', enabled: true },
+              { id: 5, name: 'Low Trust Score Warning', condition: { field: 'social_trust_score', operator: '<', value: 20 }, action: 'flag', enabled: true },
+              { id: 6, name: 'VPN/Proxy Fraud Prevention', condition: { field: 'vpn_proxy_usage', operator: '==', value: 1 }, action: 'block', enabled: true },
+              { id: 7, name: 'High Fraud Complaint Volume', condition: { field: 'fraud_complaints_count', operator: '>', value: 5 }, action: 'block', enabled: true }
+            ]);
+          }
+        } catch (e) {
+          setRules([
+            { id: 1, name: 'Block very high value', condition: { field: 'amount', operator: '>', value: 100000 }, action: 'block', enabled: true },
+            { id: 2, name: 'Flag late night high value', condition: { field: 'amount', operator: '>', value: 10000 }, action: 'flag', enabled: true }
+          ]);
+        }
       }
 
       if (alertsRes?.ok) {
         setAlerts((await alertsRes.json()).alerts || []);
+      } else {
+        try {
+          const alertsSnap = await getDocs(query(collection(db, 'alerts'), orderBy('createdAt', 'desc'), limit(50)));
+          if (!alertsSnap.empty) {
+            setAlerts(alertsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }
+        } catch (e) {
+          console.error("Firestore alerts fetch failed:", e);
+        }
       }
 
       if (thresholdsRes?.ok) {
@@ -535,6 +578,8 @@ const AdminDashboard = () => {
       const hourly = {};
       for (let h = 0; h < 24; h++) hourly[h] = { count: 0, avg_risk: 0, totalRisk: 0 };
 
+      const payee_trust_distribution = { High: 0, Medium: 0, Low: 0, Suspicious: 0 };
+
       // Process Transactions
       allTx.forEach(t => {
         const createdRaw = t.createdAt || t.timestamp;
@@ -590,6 +635,18 @@ const AdminDashboard = () => {
         if (score > 0) {
           userRiskMap.set(uid, { riskScore: score, count: 0, reasons });
         }
+
+        // Calculate Trust Distribution for Graph
+        const trust = Number(details.socialTrustScore || u.params?.socialTrustScore || 0);
+        if (details.recipientBlacklistStatus || details.pastFraudulentBehavior > 0) {
+          payee_trust_distribution.Suspicious += 1;
+        } else if (trust >= 75) {
+          payee_trust_distribution.High += 1;
+        } else if (trust >= 40) {
+          payee_trust_distribution.Medium += 1;
+        } else {
+          payee_trust_distribution.Low += 1;
+        }
       });
 
       // 2. Add risk from high-risk transactions
@@ -616,32 +673,49 @@ const AdminDashboard = () => {
         .sort((a, b) => b.avg_risk - a.avg_risk)
         .slice(0, 5);
 
-      // Detect Patterns Client-Side
+      // Pattern Detection Logic
       const new_fraud_patterns = [];
 
-      // Pattern 1: High Velocity
+      try {
+        const alertSnap = await getDocs(query(collection(db, 'alerts'), orderBy('createdAt', 'desc'), limit(15)));
+        const recentAlerts = alertSnap.docs.map(d => d.data());
+
+        // Dynamic patterns from live rule alerts
+        recentAlerts.forEach(alert => {
+          if (alert.details && (alert.type === 'BLOCK' || alert.type === 'FLAG')) {
+            const triggeredTitle = alert.type === 'BLOCK' ? `Policy Violation: ${alert.details}` : `Security Warning: ${alert.details}`;
+            if (!new_fraud_patterns.find(p => p.pattern === triggeredTitle)) {
+              new_fraud_patterns.push({
+                pattern: triggeredTitle,
+                description: alert.message,
+                severity: alert.severity
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.error("Alert pattern extraction failed:", e);
+      }
+
+      // Add heuristic patterns if needed
       const recentTx = allTx.filter(t => {
         const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
         return (now - d) < (24 * 60 * 60 * 1000);
       });
-      if (recentTx.length > 50) {
-        new_fraud_patterns.push({ pattern: 'High Transaction Volume', description: `${recentTx.length} transactions in last 24h`, severity: 'medium' });
-      }
 
-      // Pattern 2: Late Night Activity
-      const lateNight = recentTx.filter(t => {
-        const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
-        const h = d.getHours();
-        return h >= 0 && h <= 4;
-      });
-      if (lateNight.length > 5) {
-        new_fraud_patterns.push({ pattern: 'Late Night Surge', description: `${lateNight.length} transactions between 12AM-4AM`, severity: 'high' });
-      }
+      if (new_fraud_patterns.length < 3) {
+        if (recentTx.length > 50) {
+          new_fraud_patterns.push({ pattern: 'High Transaction Volume', description: `${recentTx.length} transactions in last 24h`, severity: 'medium' });
+        }
 
-      // Pattern 3: High Value
-      const highValue = recentTx.filter(t => parseFloat(t.amount) > 10000);
-      if (highValue.length > 3) {
-        new_fraud_patterns.push({ pattern: 'High Value Targets', description: `${highValue.length} transactions over ₹10,000`, severity: 'high' });
+        const lateNight = recentTx.filter(t => {
+          const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
+          const h = d.getHours();
+          return h >= 0 && h <= 4;
+        });
+        if (lateNight.length > 5) {
+          new_fraud_patterns.push({ pattern: 'Late Night Surge', description: `${lateNight.length} transactions between 12AM-4AM`, severity: 'high' });
+        }
       }
 
       // Formatting for Charts
@@ -657,7 +731,7 @@ const AdminDashboard = () => {
         trends,
         top_risky_users: top_risky_users.length ? top_risky_users : SAMPLE_DASHBOARD_DATA.top_risky_users,
         new_fraud_patterns: new_fraud_patterns.length ? new_fraud_patterns : [],
-        payee_trust_distribution: { high: 45, medium: 32, low: 18, unknown: 5 }, // Placeholder for now
+        payee_trust_distribution,
         hourly_risk_distribution,
         feedback_stats: { total_feedback: 25, fraud_reports: 8, false_positives: 17, feedback_rate: 5.2 },
         feature_importance: []
@@ -672,54 +746,115 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchDashboardData();
 
-    const interval = setInterval(fetchDashboardData, 30000);
-    return () => clearInterval(interval);
+    // Real-time alerts listener
+    const alertsQuery = query(
+      collection(db, 'alerts'),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(alertsQuery, (snapshot) => {
+      const liveAlerts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setAlerts(liveAlerts);
+    }, (error) => {
+      console.error("Alerts listener error:", error);
+    });
+
+    const interval = setInterval(fetchDashboardData, 60000); // Less frequent polling since alerts are live
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   const handleAddRule = async () => {
-    if (!newRule.name || !newRule.value) return;
+    if (!newRule.name || newRule.conditions.some(c => !c.value)) return;
 
     const ruleData = {
       name: newRule.name,
-      condition: {
-        field: newRule.field,
-        operator: newRule.operator,
-        value: parseFloat(newRule.value)
-      },
+      conditions: newRule.conditions.map(c => ({
+        ...c,
+        value: isNaN(parseFloat(c.value)) ? c.value : parseFloat(c.value)
+      })),
       action: newRule.action,
       risk_modifier: newRule.risk_modifier,
-      enabled: true
+      enabled: true,
+      createdAt: serverTimestamp()
     };
 
     try {
-      const res = await fetch(`${API_BASE}/api/rules`, {
+      // 1. Try API
+      fetch(`${API_BASE}/api/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(ruleData)
-      });
+      }).catch(() => null);
 
-      if (res.ok) {
-        await fetchDashboardData();
-      } else {
+      // 2. Always persist to Firestore for resilience
+      const { addDoc } = await import("firebase/firestore");
+      await addDoc(collection(db, 'rules'), ruleData);
 
-        setRules(prev => [...prev, { ...ruleData, id: Date.now() }]);
-      }
+      await fetchDashboardData();
     } catch (error) {
       console.error('Error adding rule:', error);
-
       setRules(prev => [...prev, { ...ruleData, id: Date.now() }]);
     }
-    setNewRule({ name: '', field: 'amount', operator: '>', value: '', action: 'flag', risk_modifier: 20 });
+    setNewRule({ name: '', conditions: [{ field: 'amount', operator: '>', value: '' }], action: 'flag', risk_modifier: 20 });
+  };
+
+  const addConditionField = () => {
+    setNewRule({
+      ...newRule,
+      conditions: [...newRule.conditions, { field: 'amount', operator: '>', value: '' }]
+    });
+  };
+
+  const updateCondition = (index, updates) => {
+    const newConditions = [...newRule.conditions];
+    newConditions[index] = { ...newConditions[index], ...updates };
+    setNewRule({ ...newRule, conditions: newConditions });
+  };
+
+  const removeCondition = (index) => {
+    if (newRule.conditions.length <= 1) return;
+    setNewRule({
+      ...newRule,
+      conditions: newRule.conditions.filter((_, i) => i !== index)
+    });
   };
 
   const handleDeleteRule = async (ruleId) => {
     try {
-      await fetch(`${API_BASE}/api/rules/${ruleId}`, { method: 'DELETE' });
+      // Try API delete
+      await fetch(`${API_BASE}/api/rules/${ruleId}`, { method: 'DELETE' }).catch(() => null);
+
+      // Try Firestore delete
+      const { deleteDoc, doc } = await import("firebase/firestore");
+      if (typeof ruleId === 'string' && ruleId.length > 5) { // Likely firestore ID
+        await deleteDoc(doc(db, 'rules', ruleId));
+      }
+
       await fetchDashboardData();
     } catch (error) {
       console.error('Error deleting rule:', error);
-
       setRules(prev => prev.filter(r => r.id !== ruleId));
+    }
+  };
+
+  const handleToggleRule = async (ruleId, currentStatus) => {
+    try {
+      const { updateDoc, doc } = await import("firebase/firestore");
+      if (typeof ruleId === 'string' && ruleId.length > 5) {
+        await updateDoc(doc(db, 'rules', ruleId), {
+          enabled: !currentStatus
+        });
+      }
+      await fetchDashboardData();
+    } catch (error) {
+      console.error('Error toggling rule:', error);
     }
   };
 
@@ -1264,33 +1399,87 @@ const AdminDashboard = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ScrollArea className="h-[200px]">
+                    <div className="min-h-[250px] flex flex-col">
                       {loading ? (
-                        <div className="space-y-2">
-                          {[1, 2, 3].map((i) => (
-                            <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
-                              <Skeleton className="h-4 w-32" />
-                              <Skeleton className="h-5 w-12 rounded-full" />
-                            </div>
-                          ))}
+                        <div className="space-y-2 p-4">
+                          <Skeleton className="h-12 w-full" />
+                          <Skeleton className="h-24 w-full" />
+                          <Skeleton className="h-12 w-full" />
                         </div>
                       ) : dashboardData?.top_risky_users?.length > 0 ? (
-                        <div className="space-y-2">
-                          {dashboardData.top_risky_users.map((user, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100 group">
-                              <span className="text-sm font-mono text-slate-600 truncate" title={user.user_id}>
-                                {user.user_id}
-                              </span>
-                              <Badge variant="outline" className={getRiskColor(user.avg_risk >= 70 ? 'high' : user.avg_risk >= 40 ? 'medium' : 'low')}>
-                                {user.avg_risk?.toFixed(1)}%
-                              </Badge>
+                        <div className="flex-1 flex flex-col">
+                          {/* Podium UI */}
+                          <div className="flex items-end justify-center pt-8 pb-4 px-2 select-none">
+                            {/* 2nd Place */}
+                            <div className="flex flex-col items-center w-1/3">
+                              <div className="text-[10px] font-bold text-slate-400 mb-2 truncate w-full text-center px-1">
+                                {dashboardData.top_risky_users[1]?.user_id}
+                              </div>
+                              <div className="w-full bg-slate-100 border-x border-t border-slate-200 rounded-t-xl h-20 flex flex-col items-center justify-center shadow-inner relative group transition-all hover:bg-slate-200/50">
+                                <span className="text-2xl font-black text-slate-300 group-hover:text-slate-400 transition-colors">2</span>
+                                <div className="text-[10px] font-bold text-slate-500 mt-1">
+                                  {dashboardData.top_risky_users[1]?.avg_risk}%
+                                </div>
+                              </div>
                             </div>
-                          ))}
+
+                            {/* 1st Place */}
+                            <div className="flex flex-col items-center w-1/3 z-10">
+                              <div className="text-[10px] font-black text-red-500 mb-2 truncate w-full text-center px-1 tracking-tighter">
+                                {dashboardData.top_risky_users[0]?.user_id}
+                              </div>
+                              <div className="w-full bg-gradient-to-b from-red-500 to-red-600 border-x border-t border-red-700 rounded-t-xl h-28 flex flex-col items-center justify-center shadow-[0_-5px_15px_rgba(239,68,68,0.2)] relative group transition-all hover:from-red-600 hover:to-red-700">
+                                <span className="text-4xl font-black text-white drop-shadow-md">1</span>
+                                <div className="text-xs font-black text-white bg-black/20 px-2 py-0.5 rounded-full mt-1">
+                                  {dashboardData.top_risky_users[0]?.avg_risk}%
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 3rd Place */}
+                            <div className="flex flex-col items-center w-1/3">
+                              <div className="text-[10px] font-bold text-slate-400 mb-2 truncate w-full text-center px-1">
+                                {dashboardData.top_risky_users[2]?.user_id}
+                              </div>
+                              <div className="w-full bg-orange-50 border-x border-t border-orange-100 rounded-t-xl h-16 flex flex-col items-center justify-center shadow-inner relative group transition-all hover:bg-orange-100/50">
+                                <span className="text-xl font-black text-orange-200 group-hover:text-orange-300 transition-colors">3</span>
+                                <div className="text-[10px] font-bold text-orange-400 mt-1">
+                                  {dashboardData.top_risky_users[2]?.avg_risk}%
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Detail of 1st place */}
+                          <div className="mx-4 mb-4 p-2 bg-red-50 rounded-lg border border-red-100 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="p-1.5 bg-red-100 rounded-md">
+                                <ShieldAlert className="h-3 w-3 text-red-600" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-bold text-red-900 truncate max-w-[120px]">{dashboardData.top_risky_users[0]?.user_id}</p>
+                                <p className="text-[9px] text-red-700">Highest Threat Level Detected</p>
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] text-red-600 hover:bg-red-100">Profile</Button>
+                          </div>
+
+                          {/* Rest of the list if any */}
+                          {dashboardData.top_risky_users.length > 3 && (
+                            <div className="px-4 space-y-1 overflow-y-auto max-h-[80px]">
+                              {dashboardData.top_risky_users.slice(3).map((user, idx) => (
+                                <div key={idx} className="flex items-center justify-between py-1 border-t border-slate-100">
+                                  <span className="text-[10px] font-mono text-slate-400 truncate w-32">{user.user_id}</span>
+                                  <span className="text-[10px] font-bold text-slate-600">{user.avg_risk}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <p className="text-slate-400 text-center py-8">No risky users detected</p>
                       )}
-                    </ScrollArea>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -1408,68 +1597,96 @@ const AdminDashboard = () => {
                   <CardDescription>Create rules to customize fraud detection on top of ML</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                    <div className="md:col-span-2">
-                      <Label className="text-slate-600">Rule Name</Label>
-                      <Input
-                        placeholder="e.g., Block high value"
-                        value={newRule.name}
-                        className="bg-white border-slate-200"
-                        onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                      />
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-4 items-end">
+                      <div className="flex-1 w-full">
+                        <Label className="text-slate-600 font-bold text-xs uppercase tracking-tighter">Rule Identity</Label>
+                        <Input
+                          placeholder="e.g., High Value - New Account Block"
+                          value={newRule.name}
+                          className="bg-white border-slate-200 h-10"
+                          onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="w-full sm:w-48">
+                        <Label className="text-slate-600 font-bold text-xs uppercase tracking-tighter">Primary Action</Label>
+                        <Select value={newRule.action} onValueChange={(v) => setNewRule({ ...newRule, action: v })}>
+                          <SelectTrigger className="bg-white border-slate-200 h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="block">🚫 Immediate Block</SelectItem>
+                            <SelectItem value="flag">🚩 Raise Warning Flag</SelectItem>
+                            <SelectItem value="add_risk">⚠️ Increase Risk Score</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-slate-600">Field</Label>
-                      <Select value={newRule.field} onValueChange={(v) => setNewRule({ ...newRule, field: v })}>
-                        <SelectTrigger className="bg-white border-slate-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="amount">Amount</SelectItem>
-                          <SelectItem value="hour">Hour</SelectItem>
-                          <SelectItem value="risk_score">Risk Score</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-slate-600">Operator</Label>
-                      <Select value={newRule.operator} onValueChange={(v) => setNewRule({ ...newRule, operator: v })}>
-                        <SelectTrigger className="bg-white border-slate-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value=">">Greater than</SelectItem>
-                          <SelectItem value="<">Less than</SelectItem>
-                          <SelectItem value="==">Equals</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-slate-600">Value</Label>
-                      <Input
-                        type="number"
-                        placeholder="10000"
-                        value={newRule.value}
-                        className="bg-white border-slate-200"
-                        onChange={(e) => setNewRule({ ...newRule, value: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-slate-600">Action</Label>
-                      <Select value={newRule.action} onValueChange={(v) => setNewRule({ ...newRule, action: v })}>
-                        <SelectTrigger className="bg-white border-slate-200">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="block">Block</SelectItem>
-                          <SelectItem value="flag">Flag for Review</SelectItem>
-                          <SelectItem value="add_risk">Add Risk Score</SelectItem>
-                        </SelectContent>
-                      </Select>
+
+                    <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                      <Label className="text-slate-500 font-bold text-[10px] uppercase tracking-widest flex items-center gap-2">
+                        Logic conditions (Logical AND Applied)
+                      </Label>
+
+                      {newRule.conditions.map((condition, idx) => (
+                        <div key={idx} className="flex flex-col md:flex-row gap-3 items-center animate-in fade-in slide-in-from-left-2 duration-300">
+                          <div className="w-full md:w-1/3">
+                            <Select value={condition.field} onValueChange={(v) => updateCondition(idx, { field: v })}>
+                              <SelectTrigger className="bg-white border-slate-200 h-10"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="amount">Transaction Amount</SelectItem>
+                                <SelectItem value="hour">Transaction Hour (0-23)</SelectItem>
+                                <SelectItem value="risk_score">Calculated Risk Score</SelectItem>
+                                <SelectItem value="social_trust_score">Beneficiary Trust Score</SelectItem>
+                                <SelectItem value="recipient_blacklist_status">Beneficiary Blacklisted (1/0)</SelectItem>
+                                <SelectItem value="fraud_complaints_count">Beneficiary Complaints Count</SelectItem>
+                                <SelectItem value="account_age">Beneficiary Account Age (Days)</SelectItem>
+                                <SelectItem value="vpn_proxy_usage">VPN/Proxy Detection (1/0)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-full md:w-32">
+                            <Select value={condition.operator} onValueChange={(v) => updateCondition(idx, { operator: v })}>
+                              <SelectTrigger className="bg-white border-slate-200 h-10"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value=">">Greater Than</SelectItem>
+                                <SelectItem value="<">Less Than</SelectItem>
+                                <SelectItem value="==">Exactly Equals</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="w-full md:flex-1">
+                            <Input
+                              placeholder="Value..."
+                              value={condition.value}
+                              className="bg-white border-slate-200 h-10"
+                              onChange={(e) => updateCondition(idx, { value: e.target.value })}
+                            />
+                          </div>
+                          {newRule.conditions.length > 1 && (
+                            <Button size="icon" variant="ghost" onClick={() => removeCondition(idx)} className="text-slate-400 hover:text-red-500 h-10 w-10">
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={addConditionField}
+                        className="text-blue-600 font-bold text-xs p-0 h-auto hover:no-underline flex items-center gap-1"
+                      >
+                        <Plus className="h-3 w-3" /> Add additional requirement
+                      </Button>
                     </div>
                   </div>
-                  <Button onClick={handleAddRule} className="mt-4 gap-2 bg-blue-500 hover:bg-blue-600">
-                    <Plus className="h-4 w-4" /> Add Rule
+
+                  <Button
+                    onClick={handleAddRule}
+                    className="mt-6 w-full sm:w-auto h-12 px-8 gap-2 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20 rounded-xl font-bold"
+                  >
+                    <ShieldCheck className="h-5 w-5" /> Activate Security Policy
                   </Button>
                 </CardContent>
               </Card>
@@ -1496,7 +1713,24 @@ const AdminDashboard = () => {
                         <TableRow key={rule.id} className="border-slate-100 hover:bg-slate-50">
                           <TableCell className="font-medium text-slate-700">{rule.name}</TableCell>
                           <TableCell className="font-mono text-sm text-slate-600">
-                            {rule.condition?.field} {rule.condition?.operator} {rule.condition?.value}
+                            {rule.conditions ? (
+                              <div className="flex flex-col gap-1">
+                                {rule.conditions.map((c, i) => (
+                                  <div key={i} className="flex items-center gap-1">
+                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-500 uppercase">{c.field}</span>
+                                    <span className="text-blue-600 font-bold">{c.operator}</span>
+                                    <span className="bg-blue-50 px-1.5 py-0.5 rounded text-blue-700 font-bold">{c.value}</span>
+                                    {i < rule.conditions.length - 1 && <span className="text-slate-300 mx-1">&</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <span className="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-bold text-slate-500 uppercase">{rule.condition?.field}</span>
+                                <span className="text-blue-600 font-bold">{rule.condition?.operator}</span>
+                                <span className="bg-blue-50 px-1.5 py-0.5 rounded text-blue-700 font-bold">{rule.condition?.value}</span>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline" className={
@@ -1508,14 +1742,24 @@ const AdminDashboard = () => {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={rule.enabled ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-500 border-slate-200'}>
-                              {rule.enabled ? 'Active' : 'Disabled'}
-                            </Badge>
+                            <button
+                              onClick={() => handleToggleRule(rule.id, rule.enabled)}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${rule.enabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                            >
+                              <span
+                                className={`${rule.enabled ? 'translate-x-6' : 'translate-x-1'} inline-block h-4 w-4 transform rounded-full bg-white transition-transform`}
+                              />
+                            </button>
                           </TableCell>
-                          <TableCell>
-                            <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(rule.id)} className="hover:bg-red-50">
-                              <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
-                            </Button>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button size="sm" variant="ghost" onClick={() => handleToggleRule(rule.id, rule.enabled)} className="text-slate-400 hover:text-blue-600 p-0 h-8 w-8">
+                                {rule.enabled ? <ShieldCheck className="h-4 w-4" /> : <Shield className="h-4 w-4 opacity-50" />}
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(rule.id)} className="hover:bg-red-50 p-0 h-8 w-8">
+                                <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -1850,30 +2094,59 @@ const AdminDashboard = () => {
                     <div className="space-y-4">
                       {alerts.length > 0 ? alerts.map((alert, idx) => (
                         <Alert key={idx} className={
-                          alert.severity === 'high' ? 'bg-red-50 border-red-200' :
-                            'bg-amber-50 border-amber-200'
+                          alert.severity === 'high' ? 'bg-red-50 border-red-200 shadow-sm' :
+                            'bg-amber-50 border-amber-200 shadow-sm'
                         }>
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-3">
-                              {getRiskIcon(alert.severity)}
-                              <div>
-                                <AlertTitle className={alert.severity === 'high' ? 'text-red-700' : 'text-amber-700'}>
-                                  {alert.summary}
+                          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+                            <div className="flex items-start gap-4">
+                              <div className={`p-2 rounded-xl ${alert.severity === 'high' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                {getRiskIcon(alert.severity)}
+                              </div>
+                              <div className="space-y-1">
+                                <AlertTitle className={`text-base font-bold ${alert.severity === 'high' ? 'text-red-900' : 'text-amber-900'} flex items-center gap-2`}>
+                                  {alert.title || alert.summary || 'Security Alert'}
+                                  {alert.type === 'BLOCK' && <Badge className="bg-red-600">BLOCKED</Badge>}
                                 </AlertTitle>
-                                <AlertDescription className="text-slate-600 mt-1">
-                                  <div>From: {alert.transaction?.sender}</div>
-                                  <div>To: {alert.transaction?.recipient}</div>
-                                  <div>Amount: ₹{alert.transaction?.amount}</div>
+                                <AlertDescription className="text-slate-600">
+                                  <p className="font-medium text-slate-800">{alert.message}</p>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 mt-3 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-400 font-semibold uppercase tracking-tighter w-14">From:</span>
+                                      <span className="font-mono text-slate-700">{alert.sender_upi || alert.transaction?.sender || 'Unknown'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-400 font-semibold uppercase tracking-tighter w-14">To:</span>
+                                      <span className="font-mono text-slate-700">{alert.recipient_upi || alert.transaction?.recipient || 'Unknown'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-400 font-semibold uppercase tracking-tighter w-14">Amount:</span>
+                                      <span className="font-bold text-slate-900">₹{alert.transaction_amount || alert.transaction?.amount || 0}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-400 font-semibold uppercase tracking-tighter w-14">Rules:</span>
+                                      <span className="text-red-600 font-medium">{alert.details || 'System Analysis'}</span>
+                                    </div>
+                                  </div>
                                 </AlertDescription>
                               </div>
                             </div>
-                            <Badge className={getRiskColor(alert.severity)}>
-                              {alert.risk_score?.toFixed(1)}%
-                            </Badge>
+                            <div className="text-right flex flex-col items-end gap-2">
+                              <Badge variant="outline" className={getRiskColor(alert.severity)}>
+                                {alert.risk_score?.toFixed(1) || 100}% Risk
+                              </Badge>
+                              <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {alert.createdAt?.toDate ? alert.createdAt.toDate().toLocaleTimeString() :
+                                  alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : 'Recently'}
+                              </span>
+                            </div>
                           </div>
                         </Alert>
                       )) : (
-                        <p className="text-center text-slate-400 py-8">No recent alerts</p>
+                        <div className="text-center py-20 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                          <ShieldCheck className="h-12 w-12 text-slate-200 mx-auto mb-3" />
+                          <p className="text-slate-400 font-medium">No security alerts detected</p>
+                        </div>
                       )}
                     </div>
                   </ScrollArea>

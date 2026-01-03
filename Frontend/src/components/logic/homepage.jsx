@@ -8,6 +8,7 @@ import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, Histo
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "react-qr-code";
+import { QrReader } from "react-qr-reader";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';

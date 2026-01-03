@@ -3,9 +3,8 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { doc, updateDoc } from "firebase/firestore";
@@ -13,32 +12,39 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   CheckCircle,
-  Download,
-  Filter,
+  ChevronRight,
+  Clock,
+  Fingerprint,
   Flag,
   Gauge,
   HelpCircle,
   Info,
   Loader2,
+  MapPin,
   RefreshCw,
   Save,
-  Settings as SettingsIcon,
   Shield,
   ShieldAlert,
   ShieldCheck,
   Sliders,
+  Smartphone,
+  TrendingDown,
+  TrendingUp,
   User,
   UserX,
+  Wallet,
+  X,
   Zap
 } from 'lucide-react';
 import { useEffect, useState } from "react";
 import { useAuth } from '../../context/AuthContext';
+import { calculateTrustScore } from '../../lib/riskCalculator';
 import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 import { db } from "./firebase.js";
 
 
-const AUTO_CALCULATED_PARAMS = ['transactionFrequency', 'accountAge', 'timeSinceLastTransaction'];
+const AUTO_CALCULATED_PARAMS = ['transactionFrequency', 'accountAge', 'timeSinceLastTransaction', 'socialTrustScore'];
 
 
 const ML_PARAMETERS = [
@@ -153,16 +159,16 @@ const ML_PARAMETERS = [
   },
   {
     id: 'socialTrustScore',
-    name: 'Social Trust Score',
-    description: 'Trust score based on your transaction network (0-100).',
-    helpText: 'Higher scores indicate you transact with verified, trusted users. Lower scores mean transactions with unknown or flagged accounts.',
-    type: 'slider',
+    name: 'Risk Score',
+    description: 'Overall risk score calculated from all parameters.',
+    helpText: 'Auto-calculated based on all your risk factors. Lower scores indicate a more trustworthy profile. You cannot edit this directly - improve other parameters to decrease your risk.',
+    type: 'number',
     min: 0,
     max: 100,
-    step: 5,
-    defaultValue: 75,
+    defaultValue: 0,
     category: 'social',
-    modelKey: 'Social_Trust_Score'
+    modelKey: 'Social_Trust_Score',
+    autoCalculated: true
   },
   {
     id: 'accountAge',
@@ -318,7 +324,6 @@ const PROFILE_PRESETS = {
       geoLocationFlags: 'normal',
       behavioralBiometrics: 0.1,
       timeSinceLastTransaction: 12,
-      socialTrustScore: 90,
       accountAge: 730,
       highRiskTransactionTimes: false,
       pastFraudulentBehavior: 0,
@@ -348,7 +353,6 @@ const PROFILE_PRESETS = {
       geoLocationFlags: 'high-risk',
       behavioralBiometrics: 0.8,
       timeSinceLastTransaction: 2,
-      socialTrustScore: 15,
       accountAge: 30,
       highRiskTransactionTimes: true,
       pastFraudulentBehavior: 5,
@@ -417,6 +421,10 @@ const Settings = () => {
       const frequency = Math.round((recentTxs.length / 24) * 10) / 10;
       autoParams.transactionFrequency = frequency;
     }
+
+    // Social Trust Score is always 100 - Risk Score (calculated dynamically)
+    // We'll set a placeholder here; the actual display uses risk.trustScore
+    autoParams.socialTrustScore = 100; // Will be overridden by calculated value in display
 
     return autoParams;
   };
@@ -507,10 +515,14 @@ const Settings = () => {
     try {
       const userRef = doc(db, "users", user.uid);
 
+      const paramsToSave = { ...parameters };
+      if (paramsToSave.socialTrustScore === undefined) {
+        paramsToSave.socialTrustScore = 100;
+      }
 
       await updateDoc(userRef, {
-        transactionDetails: parameters,
-        modelData: convertToModelFormat(parameters),
+        transactionDetails: paramsToSave,
+        modelData: convertToModelFormat(paramsToSave),
         updatedAt: new Date()
       });
 
@@ -571,24 +583,56 @@ const Settings = () => {
   );
 
   const getRiskProfile = () => {
-    let riskScore = 0;
-    if (parameters.recipientBlacklistStatus) riskScore += 30;
-    if (parameters.vpnProxyUsage) riskScore += 15;
-    if (parameters.geoLocationFlags === 'high-risk') riskScore += 20;
-    if (parameters.geoLocationFlags === 'unusual') riskScore += 10;
-    if (parameters.highRiskTransactionTimes) riskScore += 10;
-    if (parameters.fraudComplaintsCount > 0) riskScore += parameters.fraudComplaintsCount * 5;
-    if (parameters.pastFraudulentBehavior > 0) riskScore += parameters.pastFraudulentBehavior * 8;
-    if (parameters.deviceFingerprinting > 0.5) riskScore += 10;
-    if (parameters.behavioralBiometrics > 0.5) riskScore += 10;
-    if (parameters.locationInconsistentTransactions) riskScore += 15;
-    if (parameters.merchantCategoryMismatch) riskScore += 10;
-    if (parameters.userDailyLimitExceeded) riskScore += 15;
+    // Use centralized risk calculator for consistent scoring
+    // IMPORTANT: Exclude socialTrustScore from parameters to avoid circular dependency
+    const paramsForCalc = { ...parameters };
+    delete paramsForCalc.socialTrustScore; // Don't use stored value
+    
+    const result = calculateTrustScore(paramsForCalc, transactions || []);
+    const riskScore = result.riskScore;
+    // Trust Score is ALWAYS 100 - Risk Score
+    const trustScore = 100 - riskScore;
 
-    if (riskScore >= 60) return { level: 'High Risk', color: 'bg-red-500', textColor: 'text-red-700', bgColor: 'bg-red-50', description: 'Your profile may be flagged by the ML model' };
-    if (riskScore >= 30) return { level: 'Medium Risk', color: 'bg-orange-500', textColor: 'text-orange-700', bgColor: 'bg-orange-50', description: 'Some parameters may raise alerts' };
-    if (riskScore >= 10) return { level: 'Low Risk', color: 'bg-yellow-500', textColor: 'text-yellow-700', bgColor: 'bg-yellow-50', description: 'Minor risk factors detected' };
-    return { level: 'Trusted', color: 'bg-green-500', textColor: 'text-green-700', bgColor: 'bg-green-50', description: 'Your profile appears trustworthy' };
+    if (riskScore >= 60) return { 
+      level: 'High Risk', 
+      color: 'bg-red-500', 
+      textColor: 'text-red-700', 
+      bgColor: 'bg-red-50', 
+      description: 'Your profile may be flagged by the ML model',
+      riskScore,
+      trustScore,
+      breakdown: result.breakdown
+    };
+    if (riskScore >= 35) return { 
+      level: 'Medium Risk', 
+      color: 'bg-orange-500', 
+      textColor: 'text-orange-700', 
+      bgColor: 'bg-orange-50', 
+      description: 'Some parameters may raise alerts',
+      riskScore,
+      trustScore,
+      breakdown: result.breakdown
+    };
+    if (riskScore >= 10) return { 
+      level: 'Low Risk', 
+      color: 'bg-yellow-500', 
+      textColor: 'text-yellow-700', 
+      bgColor: 'bg-yellow-50', 
+      description: 'Minor risk factors detected',
+      riskScore,
+      trustScore,
+      breakdown: result.breakdown
+    };
+    return { 
+      level: 'Trusted', 
+      color: 'bg-green-500', 
+      textColor: 'text-green-700', 
+      bgColor: 'bg-green-50', 
+      description: 'Your profile appears trustworthy',
+      riskScore,
+      trustScore,
+      breakdown: result.breakdown
+    };
   };
 
   const renderParameterInput = (param, currentValue, onChange, disabled = false) => {
@@ -668,421 +712,382 @@ const Settings = () => {
 
   const risk = getRiskProfile();
 
+  // Group parameters by category for organized display
+  const parametersByCategory = {
+    financial: ML_PARAMETERS.filter(p => p.category === 'financial'),
+    device: ML_PARAMETERS.filter(p => p.category === 'device'),
+    behavioral: ML_PARAMETERS.filter(p => p.category === 'behavioral'),
+    location: ML_PARAMETERS.filter(p => p.category === 'location'),
+    history: ML_PARAMETERS.filter(p => p.category === 'history'),
+    recipient: ML_PARAMETERS.filter(p => p.category === 'recipient'),
+    temporal: ML_PARAMETERS.filter(p => p.category === 'temporal'),
+    social: ML_PARAMETERS.filter(p => p.category === 'social'),
+    account: ML_PARAMETERS.filter(p => p.category === 'account'),
+    merchant: ML_PARAMETERS.filter(p => p.category === 'merchant'),
+  };
+
+  const getCategoryIcon = (cat) => {
+    const icons = {
+      financial: Wallet,
+      device: Smartphone,
+      behavioral: Fingerprint,
+      location: MapPin,
+      history: Clock,
+      recipient: User,
+      temporal: Clock,
+      social: UserX,
+      account: ShieldCheck,
+      merchant: ShieldAlert,
+    };
+    return icons[cat] || Sliders;
+  };
+
+  const getCategoryColor = (cat) => {
+    const colors = {
+      financial: 'from-emerald-500 to-green-600',
+      device: 'from-blue-500 to-indigo-600',
+      behavioral: 'from-orange-500 to-amber-600',
+      location: 'from-rose-500 to-pink-600',
+      history: 'from-slate-500 to-gray-600',
+      recipient: 'from-violet-500 to-purple-600',
+      temporal: 'from-cyan-500 to-teal-600',
+      social: 'from-red-500 to-rose-600',
+      account: 'from-indigo-500 to-blue-600',
+      merchant: 'from-amber-500 to-yellow-600',
+    };
+    return colors[cat] || 'from-slate-500 to-gray-600';
+  };
+
+  const getCategoryName = (cat) => {
+    const names = {
+      financial: 'Financial',
+      device: 'Device & Security',
+      behavioral: 'Behavioral Patterns',
+      location: 'Location & Geography',
+      history: 'History & Flags',
+      recipient: 'Recipient Status',
+      temporal: 'Time & Frequency',
+      social: 'Social Trust',
+      account: 'Account Details',
+      merchant: 'Merchant Info',
+    };
+    return names[cat] || cat;
+  };
+
+  const renderCompactInput = (param, currentValue, onChange, disabled = false) => {
+    switch (param.type) {
+      case 'number':
+        return (
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              min={param.min}
+              max={param.max}
+              value={currentValue}
+              onChange={(e) => onChange(param.id, parseFloat(e.target.value) || 0)}
+              className="w-16 h-7 text-xs px-2 text-center font-medium"
+              disabled={disabled}
+            />
+            {param.unit && <span className="text-[10px] text-slate-400">{param.unit}</span>}
+          </div>
+        );
+      case 'slider':
+        return (
+          <div className="flex items-center gap-2 w-full">
+            <input
+              type="range"
+              min={param.min}
+              max={param.max}
+              step={param.step}
+              value={currentValue}
+              onChange={(e) => onChange(param.id, parseFloat(e.target.value))}
+              className="flex-1 h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+              disabled={disabled}
+            />
+            <span className="text-xs font-bold text-slate-700 w-8 text-right">{currentValue}</span>
+          </div>
+        );
+      case 'select':
+        return (
+          <Select value={currentValue} onValueChange={(value) => onChange(param.id, value)} disabled={disabled}>
+            <SelectTrigger className="h-7 text-xs w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {param.options.map(option => (
+                <SelectItem key={option} value={option} className="text-xs">
+                  {option.charAt(0).toUpperCase() + option.slice(1).replace('_', ' ')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      case 'toggle':
+        return (
+          <button
+            onClick={() => !disabled && onChange(param.id, !currentValue)}
+            disabled={disabled}
+            className={`relative w-10 h-5 rounded-full transition-all duration-200 ${
+              currentValue ? 'bg-blue-500' : 'bg-slate-300'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+              currentValue ? 'translate-x-5' : 'translate-x-0'
+            }`} />
+          </button>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-100 via-gray-50 to-slate-100">
-      {/* Desktop Sidebar */}
+    <div className="flex min-h-screen bg-slate-50">
       <div className="hidden md:block w-64 h-screen sticky top-0 border-r border-slate-200 bg-white">
         <SidebarContent />
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Navigation */}
         <MobileNav />
 
         <ScrollArea className="flex-1">
-          <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-            {/* Page Header */}
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
-            >
-              <div>
-                <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                  <SettingsIcon className="h-7 w-7 text-blue-500" />
-                  My Fraud Profile Settings
-                </h1>
-                <p className="text-slate-500 mt-1">
-                  Configure your ML parameters that are used when analyzing transactions
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                {!isEditing ? (
-                  <Button
-                    onClick={() => setIsEditing(true)}
-                    className="bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white shadow-lg shadow-blue-500/25"
-                  >
-                    <Sliders className="h-4 w-4 mr-2" />
-                    Edit Settings
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="outline"
-                      onClick={handleCancelEdit}
-                      className=" text-black"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleResetToDefaults}
-                      className=" text-black"
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2 text-black" />
-                      Reset Defaults
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handleRecalculateSuggested}
-                      className="text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                    >
-                      <Zap className="h-4 w-4 mr-2" />
-                      Recalculate
-                    </Button>
-                    <Button
-                      onClick={handleSaveParameters}
-                      disabled={saving || !hasChanges}
-                      className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-black"
-                    >
-                      {saving ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      Save Changes
-                    </Button>
-                  </>
-                )}
-              </div>
-            </motion.div>
-
+          <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
+            
             {/* Notification */}
             <AnimatePresence>
               {notification && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                >
-                  <Alert className={
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                  <Alert className={`py-2 ${
                     notification.type === 'success' ? 'border-green-200 bg-green-50' :
-                      notification.type === 'info' ? 'border-blue-200 bg-blue-50' :
-                        'border-red-200 bg-red-50'
-                  }>
-                    {notification.type === 'success' ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : notification.type === 'info' ? (
-                      <Info className="h-4 w-4 text-blue-600" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
-                    )}
-                    <AlertDescription className={
+                    notification.type === 'info' ? 'border-blue-200 bg-blue-50' : 'border-red-200 bg-red-50'
+                  }`}>
+                    {notification.type === 'success' ? <CheckCircle className="h-4 w-4 text-green-600" /> :
+                     notification.type === 'info' ? <Info className="h-4 w-4 text-blue-600" /> :
+                     <AlertTriangle className="h-4 w-4 text-red-600" />}
+                    <AlertDescription className={`text-sm ${
                       notification.type === 'success' ? 'text-green-700' :
-                        notification.type === 'info' ? 'text-blue-700' :
-                          'text-red-700'
-                    }>
-                      {notification.message}
-                    </AlertDescription>
+                      notification.type === 'info' ? 'text-blue-700' : 'text-red-700'
+                    }`}>{notification.message}</AlertDescription>
                   </Alert>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            {/* User Profile Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="border-0 shadow-lg overflow-hidden">
-                <CardHeader className={`p-5 ${risk.bgColor}`}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-16 h-16 rounded-xl ${risk.color} flex items-center justify-center text-white shadow-lg`}>
-                      {userData?.photoURL ? (
-                        <img src={userData.photoURL} alt="Profile" className="w-16 h-16 rounded-xl object-cover" />
+            {/* Header with Profile Summary */}
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+              <Card className="border-0 shadow-sm overflow-hidden bg-white">
+                <div className="p-4 md:p-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* Left: User Info */}
+                    <div className="flex items-center gap-4">
+                      <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${
+                        risk.level === 'Trusted' ? 'from-emerald-400 to-green-500' :
+                        risk.level === 'Low Risk' ? 'from-yellow-400 to-amber-500' :
+                        risk.level === 'Medium Risk' ? 'from-orange-400 to-red-500' :
+                        'from-red-500 to-rose-600'
+                      } flex items-center justify-center text-white shadow-lg`}>
+                        {userData?.photoURL ? (
+                          <img src={userData.photoURL} alt="" className="w-14 h-14 rounded-2xl object-cover" />
+                        ) : (
+                          <User className="h-7 w-7" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h1 className="text-lg font-bold text-slate-800">{userData?.name || 'Your Profile'}</h1>
+                          <Badge className={`text-[10px] px-2 py-0.5 ${
+                            risk.level === 'Trusted' ? 'bg-emerald-100 text-emerald-700' :
+                            risk.level === 'Low Risk' ? 'bg-yellow-100 text-yellow-700' :
+                            risk.level === 'Medium Risk' ? 'bg-orange-100 text-orange-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {risk.level === 'Trusted' ? <ShieldCheck className="h-3 w-3 mr-1" /> : 
+                             risk.level === 'High Risk' ? <ShieldAlert className="h-3 w-3 mr-1" /> : null}
+                            {risk.level}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-slate-500">{userData?.upiId || 'Fraud Detection Settings'}</p>
+                      </div>
+                    </div>
+
+                    {/* Right: Action Buttons */}
+                    <div className="flex items-center gap-2">
+                      {hasChanges && <Badge className="bg-orange-100 text-orange-600 text-[10px]">Unsaved</Badge>}
+                      {!isEditing ? (
+                        <Button size="sm" onClick={() => setIsEditing(true)} className="bg-slate-900 hover:bg-slate-800 text-white h-8 px-3 text-xs">
+                          <Sliders className="h-3.5 w-3.5 mr-1.5" /> Edit
+                        </Button>
                       ) : (
-                        <User className="h-8 w-8" />
+                        <div className="flex gap-1.5">
+                          <Button size="sm" variant="ghost" onClick={handleCancelEdit} className="h-8 px-2 text-xs">
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={handleRecalculateSuggested} className="h-8 px-2 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50">
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" onClick={handleSaveParameters} disabled={saving || !hasChanges} className="h-8 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white">
+                            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-1" />}
+                            Save
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-xl flex items-center gap-3">
-                        {userData?.name || 'Your Profile'}
-                        <Badge className={`${risk.bgColor} ${risk.textColor} border-0`}>
-                          {risk.level}
-                        </Badge>
-                      </CardTitle>
-                      <CardDescription className="mt-1 text-slate-600">
-                        {userData?.upiId || userData?.email || 'No UPI ID set'}
-                      </CardDescription>
-                      <p className="text-sm text-slate-500 mt-1">{risk.description}</p>
-                    </div>
                   </div>
-                </CardHeader>
-              </Card>
-            </motion.div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 }}
-              >
-                <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-blue-100 text-sm font-medium">Total Parameters</p>
-                        <p className="text-3xl font-bold mt-1">{ML_PARAMETERS.length}</p>
-                      </div>
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                        <Sliders className="h-6 w-6" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <Card className="border-0 shadow-lg bg-gradient-to-br from-emerald-500 to-green-600 text-white">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-emerald-100 text-sm font-medium">Trust Score</p>
-                        <p className="text-3xl font-bold mt-1">{parameters.socialTrustScore}</p>
-                      </div>
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                        <ShieldCheck className="h-6 w-6" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25 }}
-              >
-                <Card className="border-0 shadow-lg bg-gradient-to-br from-purple-500 to-violet-600 text-white">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-purple-100 text-sm font-medium">Account Age</p>
-                        <p className="text-3xl font-bold mt-1">{parameters.accountAge} <span className="text-lg">days</span></p>
-                      </div>
-                      <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                        <Shield className="h-6 w-6" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-
-            {/* Example Profile Presets */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.28 }}
-            >
-              <Card className="border-0 shadow-md">
-                <CardHeader className="p-5 border-b border-slate-200 bg-slate-50">
-                  <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <Download className="h-5 w-5 text-purple-600" />
-                    Import Example Profiles
-                  </CardTitle>
-                  <CardDescription className="text-sm text-slate-600 mt-1">
-                    Load example configurations to understand how different profiles affect fraud detection
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
-                      <motion.div
-                        key={key}
-                        whileHover={{ scale: 1.02 }}
-                        className={`p-4 rounded-xl border-2 ${preset.borderColor} ${preset.bgColor} transition-all duration-200 cursor-pointer`}
-                        onClick={() => handleImportPreset(key)}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${preset.color} flex items-center justify-center text-white shadow-lg flex-shrink-0`}>
-                            <preset.icon className="h-6 w-6" />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-                              {preset.name}
-                              <Badge className={`${key === 'lowRisk' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} border-0 text-[10px]`}>
-                                {key === 'lowRisk' ? 'Trusted' : 'Flagged'}
-                              </Badge>
-                            </h3>
-                            <p className="text-sm text-slate-600 mt-1">{preset.description}</p>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {key === 'lowRisk' ? (
-                                <>
-                                  <span className="text-[10px] px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ Verified</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ 2yr old account</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ No complaints</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-green-200 text-green-800 rounded-full">✓ Trusted device</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 rounded-full">✗ Blacklisted</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 rounded-full">✗ VPN usage</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 rounded-full">✗ 8 complaints</span>
-                                  <span className="text-[10px] px-2 py-0.5 bg-red-200 text-red-800 rounded-full">✗ New account</span>
-                                </>
-                              )}
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={`mt-3 ${key === 'lowRisk' ? 'border-green-400 text-green-700 hover:bg-green-100' : 'border-red-400 text-red-700 hover:bg-red-100'}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleImportPreset(key);
-                              }}
-                            >
-                              <Download className="h-3 w-3 mr-1" />
-                              Import Profile
-                            </Button>
-                          </div>
+                  {/* Quick Stats Row */}
+                  <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className={`bg-gradient-to-br rounded-xl p-3 border ${risk.riskScore <= 30 ? 'from-emerald-50 to-green-50 border-emerald-100' : risk.riskScore <= 60 ? 'from-yellow-50 to-amber-50 border-yellow-100' : 'from-red-50 to-rose-50 border-red-100'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className={`text-[10px] font-medium uppercase tracking-wide ${risk.riskScore <= 30 ? 'text-emerald-600' : risk.riskScore <= 60 ? 'text-yellow-600' : 'text-red-600'}`}>Risk Score</p>
+                          <p className={`text-2xl font-bold ${risk.riskScore <= 30 ? 'text-emerald-700' : risk.riskScore <= 60 ? 'text-yellow-700' : 'text-red-700'}`}>{risk.riskScore}</p>
                         </div>
-                      </motion.div>
-                    ))}
+                        <div className={`p-2 rounded-lg ${risk.riskScore <= 30 ? 'bg-emerald-100' : risk.riskScore <= 60 ? 'bg-yellow-100' : 'bg-red-100'}`}>
+                          {risk.riskScore <= 30 ? <TrendingDown className="h-4 w-4 text-emerald-600" /> : <TrendingUp className="h-4 w-4 text-red-600" />}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 border border-blue-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-blue-600 font-medium uppercase tracking-wide">Account Age</p>
+                          <p className="text-2xl font-bold text-blue-700">{parameters.accountAge}<span className="text-sm font-normal ml-0.5">d</span></p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-blue-100">
+                          <Clock className="h-4 w-4 text-blue-600" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-3 border border-violet-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-violet-600 font-medium uppercase tracking-wide">Complaints</p>
+                          <p className="text-2xl font-bold text-violet-700">{parameters.fraudComplaintsCount}</p>
+                        </div>
+                        <div className={`p-2 rounded-lg ${parameters.fraudComplaintsCount === 0 ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                          {parameters.fraudComplaintsCount === 0 ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-red-600" />}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-xl p-3 border border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-slate-600 font-medium uppercase tracking-wide">Status</p>
+                          <p className="text-sm font-bold text-slate-700 capitalize">{parameters.recipientVerificationStatus?.replace('_', ' ')}</p>
+                        </div>
+                        <div className={`p-2 rounded-lg ${parameters.recipientVerificationStatus === 'verified' ? 'bg-emerald-100' : 'bg-orange-100'}`}>
+                          {parameters.recipientVerificationStatus === 'verified' ? <ShieldCheck className="h-4 w-4 text-emerald-600" /> : <Shield className="h-4 w-4 text-orange-600" />}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </CardContent>
+                </div>
               </Card>
             </motion.div>
 
-            {/* Category Filter */}
-            <Card className="border-0 shadow-md">
-              <CardContent className="p-4">
-                <div className="flex flex-col md:flex-row gap-4 items-center">
-                  <span className="text-sm font-medium text-slate-600">Filter by category:</span>
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-full md:w-56">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filter category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.map(cat => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          <div className="flex items-center gap-2">
-                            <cat.icon className="h-4 w-4" />
-                            {cat.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {hasChanges && (
-                    <Badge className="bg-orange-100 text-orange-700 border-0">
-                      Unsaved changes
-                    </Badge>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Parameters List */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card className="border-0 shadow-md">
-                <CardHeader className="p-5 border-b border-slate-200 bg-slate-50">
-                  <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                    <Sliders className="h-6 w-6 text-blue-600" />
-                    ML Model Parameters
-                  </CardTitle>
-                  <CardDescription className="text-sm text-slate-600 mt-1">
-                    These parameters are used by the ML model to analyze your transactions. Hover over the <HelpCircle className="h-3 w-3 inline text-slate-400" /> icon for detailed explanations.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-4">
-                  {loading ? (
-                    <div className="p-12 text-center">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
-                      <p className="text-slate-500">Loading your settings...</p>
+            {/* Quick Presets */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {Object.entries(PROFILE_PRESETS).map(([key, preset]) => (
+                  <button
+                    key={key}
+                    onClick={() => handleImportPreset(key)}
+                    className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border-2 transition-all hover:scale-[1.02] ${
+                      key === 'lowRisk' 
+                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400' 
+                        : 'bg-red-50 border-red-200 hover:border-red-400'
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${preset.color} flex items-center justify-center`}>
+                      <preset.icon className="h-4 w-4 text-white" />
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                      {filteredParameters.map((param, index) => (
-                        <motion.div
-                          key={param.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: index * 0.02 }}
-                          className={`p-4 rounded-xl transition-all duration-200 ${param.autoCalculated
-                            ? 'bg-emerald-50 border-2 border-emerald-200 shadow-sm'
-                            : isEditing
-                              ? 'bg-blue-50 border-2 border-blue-200 shadow-sm'
-                              : 'bg-white border border-slate-200 shadow-sm hover:shadow-md'
-                            }`}
-                        >
-                          <div className="flex items-center gap-2 mb-3">
-                            <Label className="text-sm font-semibold text-slate-800 flex-1">
-                              {param.name}
-                            </Label>
-                            {param.autoCalculated && (
-                              <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px] px-1.5" title="Can be auto-calculated if not set">
-                                Suggested
-                              </Badge>
-                            )}
-                            <div className="group relative">
-                              <HelpCircle className="h-4 w-4 text-slate-400 hover:text-blue-500 cursor-help transition-colors" />
-                              <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                                <div className="font-medium mb-1">{param.name}</div>
-                                <div className="text-slate-300 leading-relaxed mb-2">{param.description}</div>
-                                <div className="text-slate-400 leading-relaxed text-[11px]">{param.helpText}</div>
-                                {param.autoCalculated && (
-                                  <div className="mt-2 pt-2 border-t border-slate-600 text-emerald-400 text-[10px]">
-                                    💡 Suggested value calculated from your activity. You can override it.
+                    <div className="text-left">
+                      <p className={`text-xs font-semibold ${key === 'lowRisk' ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {key === 'lowRisk' ? 'Load Trusted' : 'Load Risky'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">Test profile</p>
+                    </div>
+                    <ChevronRight className={`h-4 w-4 ${key === 'lowRisk' ? 'text-emerald-400' : 'text-red-400'}`} />
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Parameters - Compact Single Card */}
+            {loading ? (
+              <div className="p-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-4" />
+                <p className="text-slate-500">Loading your settings...</p>
+              </div>
+            ) : (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                <Card className="border-0 shadow-sm overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-800 to-slate-900">
+                    <div className="flex items-center gap-2">
+                      <Sliders className="h-4 w-4 text-white" />
+                      <span className="text-sm font-semibold text-white">All Parameters</span>
+                    </div>
+                    <Badge className="bg-white/20 text-white text-[10px]">{ML_PARAMETERS.length} total</Badge>
+                  </div>
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {Object.entries(parametersByCategory).map(([categoryKey, params]) => {
+                        if (params.length === 0) return null;
+                        const CategoryIcon = getCategoryIcon(categoryKey);
+                        return (
+                          <div key={categoryKey} className="space-y-2">
+                            {/* Category Header */}
+                            <div className={`flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gradient-to-r ${getCategoryColor(categoryKey)}`}>
+                              <CategoryIcon className="h-3.5 w-3.5 text-white" />
+                              <span className="text-[11px] font-semibold text-white truncate">{getCategoryName(categoryKey)}</span>
+                              <span className="text-[10px] text-white/70 ml-auto">{params.length}</span>
+                            </div>
+                            {/* Parameters List */}
+                            <div className="space-y-1.5">
+                              {params.map(param => {
+                                // For socialTrustScore, always use calculated risk score
+                                const displayValue = param.id === 'socialTrustScore' 
+                                  ? risk.riskScore 
+                                  : parameters[param.id];
+                                return (
+                                <div key={param.id} className={`p-2 rounded-lg border transition-all ${
+                                  param.autoCalculated ? 'bg-emerald-50/50 border-emerald-200' :
+                                  isEditing ? 'bg-blue-50/30 border-blue-200' : 'bg-slate-50/50 border-slate-100 hover:border-slate-200'
+                                }`}>
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-[10px] font-medium text-slate-600 truncate pr-1 leading-tight">{param.name}</span>
+                                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                                      {param.autoCalculated && <span className="text-[7px] px-1 py-0.5 bg-emerald-100 text-emerald-600 rounded">A</span>}
+                                      <div className="group relative">
+                                        <HelpCircle className="h-2.5 w-2.5 text-slate-300 hover:text-blue-500 cursor-help" />
+                                        <div className="absolute right-0 bottom-full mb-1 w-44 p-2 bg-slate-800 text-white text-[10px] rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                                          {param.helpText}
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
-                                )}
-                                <div className="absolute right-3 bottom-0 transform translate-y-1/2 rotate-45 w-2 h-2 bg-slate-800"></div>
-                              </div>
+                                  {renderCompactInput(param, displayValue, updateParameter, !isEditing || param.id === 'socialTrustScore')}
+                                </div>
+                              )})}
                             </div>
                           </div>
-                          <div className="flex justify-center">
-                            {renderParameterInput(
-                              param,
-                              parameters[param.id],
-                              updateParameter,
-                              !isEditing
-                            )}
-                          </div>
-                        </motion.div>
-                      ))}
+                        );
+                      })}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
 
-            {/* Info Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <Card className="border-0 shadow-md bg-gradient-to-r from-blue-50 to-indigo-50">
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                      <Info className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-700 mb-1">How your settings are used</h3>
-                      <p className="text-sm text-slate-600">
-                        When you send or receive money, the ML fraud detection model uses these parameters
-                        along with real-time transaction data to calculate a risk score. Lower risk scores
-                        indicate safer transactions. Keep your profile accurate to ensure smooth transactions
-                        and reduce false fraud alerts.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Info Footer */}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}>
+              <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-700">
+                  These parameters are used by the ML fraud detection model to calculate risk scores during transactions. 
+                  Keep your profile accurate for fewer false alerts.
+                </p>
+              </div>
             </motion.div>
           </div>
         </ScrollArea>

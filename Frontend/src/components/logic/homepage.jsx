@@ -2,20 +2,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronRight, CreditCard, FileText, History, IndianRupee, MessageSquare, Rocket, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle, Zap } from 'lucide-react';
-import { useEffect, useState, useRef } from "react";
+import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, History, IndianRupee, QrCode, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import QRCode from "react-qr-code";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';
 import MobileNav from './MobileNav';
 import SidebarContent from './SidebarContent';
 import { db } from "./firebase.js";
-import QRCode from "react-qr-code";
-import { QrReader } from "react-qr-reader";
-import { Scan, QrCode, Camera, Minimize2 } from 'lucide-react';
 
 const SafeQrReader = (props) => {
   useEffect(() => {
@@ -433,6 +431,14 @@ export default function Homepage() {
       return;
     }
 
+    const currentUpi = (userData?.upiId || upiId || '').toLowerCase();
+    if (normalizedUpi === currentUpi) {
+      setSelfTransferError(true);
+      setVerificationStatus(null);
+      return;
+    }
+    setSelfTransferError(false);
+
     setVerificationStatus("loading");
 
     try {
@@ -834,6 +840,7 @@ export default function Homepage() {
                                       onChange={(e) => {
                                         setRecipientUpiId(e.target.value);
                                         setVerificationStatus(null);
+                                        setSelfTransferError(false);
                                       }}
                                       placeholder="Ex: mobileNumber@upi or username@bank"
                                       className="pl-4 pr-10 h-12 bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-sm transition-all shadow-sm"
@@ -868,6 +875,21 @@ export default function Homepage() {
 
                               {/* Verification Status Display */}
                               <AnimatePresence mode="wait">
+                                {selfTransferError && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="p-4 rounded-xl border bg-orange-50 border-orange-200">
+                                      <div className="flex items-center gap-3 text-orange-700">
+                                        <User className="h-5 w-5" />
+                                        <span className="font-medium">You cannot send money to yourself</span>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
                                 {verificationStatus && verificationStatus !== "idle" && (
                                   <motion.div
                                     initial={{ opacity: 0, height: 0 }}

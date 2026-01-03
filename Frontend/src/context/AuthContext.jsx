@@ -1,7 +1,8 @@
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../components/logic/firebase';
+import { calculateTrustScore } from '../lib/riskCalculator';
 
 const AuthContext = createContext();
 
@@ -15,6 +16,11 @@ export function AuthProvider({ children }) {
   const [totalReceived, setTotalReceived] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Trust and Risk scores
+  const [trustScore, setTrustScore] = useState(100);
+  const [riskScore, setRiskScore] = useState(0);
+  const [riskLevel, setRiskLevel] = useState('low');
+  const [riskBreakdown, setRiskBreakdown] = useState([]);
 
   const fetchTransactions = async (upiId) => {
     if (!upiId) return;
@@ -55,9 +61,37 @@ export function AuthProvider({ children }) {
       setTotalSpending(spent);
       setTotalReceived(received);
       setBalance(10000 - spent + received);
+      
+      return allTransactions; // Return for score calculation
     } catch (error) {
       console.error("Error fetching transactions:", error);
+      return [];
     }
+  };
+
+  // Calculate trust/risk scores whenever user data or transactions change
+  const recalculateScores = (userTransactionDetails, userTransactions = []) => {
+    if (!userTransactionDetails) {
+      // New user with no transaction details - use defaults
+      setTrustScore(100);
+      setRiskScore(0);
+      setRiskLevel('low');
+      setRiskBreakdown([]);
+      return;
+    }
+
+    const result = calculateTrustScore(userTransactionDetails, userTransactions);
+    console.log('📊 Calculated scores:', {
+      trustScore: result.trustScore,
+      riskScore: result.riskScore,
+      riskLevel: result.riskLevel,
+      factors: result.breakdown.length
+    });
+
+    setTrustScore(result.trustScore);
+    setRiskScore(result.riskScore);
+    setRiskLevel(result.riskLevel);
+    setRiskBreakdown(result.breakdown);
   };
 
   const refreshData = async () => {
@@ -128,21 +162,45 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let unsubscribeUserDoc = null;
+    
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setLoading(true);
+      
+      // Clean up previous user document listener
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+        unsubscribeUserDoc = null;
+      }
+      
       if (currentUser) {
         setUser(currentUser);
         try {
           const userRef = doc(db, 'users', currentUser.uid);
-          const userDoc = await getDoc(userRef);
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setUserData(data);
-            
-            await fetchTransactions(data.upiId);
-          }
+          
+          // Set up real-time listener for user document
+          unsubscribeUserDoc = onSnapshot(userRef, async (userDoc) => {
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              console.log('User data updated from Firestore:', data?.transactionDetails?.socialTrustScore);
+              setUserData(data);
+              
+              // Fetch transactions and calculate scores
+              if (data.upiId) {
+                const txList = await fetchTransactions(data.upiId);
+                // Calculate trust/risk scores with updated data
+                recalculateScores(data.transactionDetails, txList);
+              } else {
+                // New user without transactions
+                recalculateScores(data.transactionDetails, []);
+              }
+            }
+          }, (error) => {
+            console.error('Error listening to user document:', error);
+          });
+          
         } catch (error) {
-          console.error('Error fetching user data:', error);
+          console.error('Error setting up user listener:', error);
         }
       } else {
         setUser(null);
@@ -151,11 +209,21 @@ export function AuthProvider({ children }) {
         setBalance(10000);
         setTotalSpending(0);
         setTotalReceived(0);
+        // Reset scores for logged out user
+        setTrustScore(100);
+        setRiskScore(0);
+        setRiskLevel('low');
+        setRiskBreakdown([]);
       }
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUserDoc) {
+        unsubscribeUserDoc();
+      }
+    };
   }, []);
 
   return (
@@ -175,7 +243,13 @@ export function AuthProvider({ children }) {
       notifications,
       unreadCount,
       markAsRead,
-      markAllAsRead
+      markAllAsRead,
+      // Trust and Risk scores
+      trustScore,
+      riskScore,
+      riskLevel,
+      riskBreakdown,
+      recalculateScores
     }}>
       {children}
     </AuthContext.Provider>

@@ -3,7 +3,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { motion } from "framer-motion";
 import {
@@ -25,21 +24,17 @@ import {
   Send,
   Settings,
   Shield,
-  ShieldAlert,
   ShieldCheck,
-  Trash2,
   UserX,
   X
 } from 'lucide-react';
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useAuth } from '../../context/AuthContext';
 import MobileNav from "./MobileNav";
 import SidebarContent from "./SidebarContent";
 import { db } from "./firebase.js";
-
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -54,18 +49,24 @@ const Dashboard = () => {
     notifications,
     unreadCount,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    // Use centralized trust/risk scores
+    trustScore: contextTrustScore,
+    riskScore: contextRiskScore,
+    riskLevel: contextRiskLevel,
+    riskBreakdown: contextRiskBreakdown
   } = useAuth();
 
   const [upiId, setUpiId] = useState("");
   const [balance, setBalance] = useState(contextBalance);
   const [transactions, setTransactions] = useState(contextTransactions);
-  const [riskTrendData, setRiskTrendData] = useState([]);
+  const [weeklySpendingData, setWeeklySpendingData] = useState([]);
+  const [securityFactors, setSecurityFactors] = useState([]);
+  const [topPartners, setTopPartners] = useState([]);
   const [totalSpending, setTotalSpending] = useState(contextTotalSpending);
   const [totalReceived, setTotalReceived] = useState(contextTotalReceived);
-  const [accountRiskScore, setAccountRiskScore] = useState(0);
-  const [riskLevel, setRiskLevel] = useState('low');
-  const [riskDistribution, setRiskDistribution] = useState([]);
+  const [accountRiskScore, setAccountRiskScore] = useState(contextRiskScore);
+  const [riskLevel, setRiskLevel] = useState(contextRiskLevel);
   const [isEditingUpi, setIsEditingUpi] = useState(false);
   const [newUpiId, setNewUpiId] = useState("");
   const [showBalance, setShowBalance] = useState(true);
@@ -74,38 +75,18 @@ const Dashboard = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef(null);
 
+  // Update risk score from context
+  useEffect(() => {
+    setAccountRiskScore(contextRiskScore);
+    setRiskLevel(contextRiskLevel);
+  }, [contextRiskScore, contextRiskLevel]);
+
   useEffect(() => {
     setBalance(contextBalance);
     setTransactions(contextTransactions);
     setTotalSpending(contextTotalSpending);
     setTotalReceived(contextTotalReceived);
-
-
-    if (userData?.transactionDetails) {
-      const params = userData.transactionDetails;
-      let score = 10;
-
-      if (params.recipientBlacklistStatus) score += 30;
-      if (params.vpnProxyUsage) score += 15;
-      if (params.geoLocationFlags === 'high-risk') score += 20;
-      if (params.geoLocationFlags === 'unusual') score += 10;
-      if (params.highRiskTransactionTimes) score += 10;
-      if (params.fraudComplaintsCount > 0) score += params.fraudComplaintsCount * 5;
-      if (params.pastFraudulentBehavior > 0) score += params.pastFraudulentBehavior * 8;
-      if (params.deviceFingerprinting > 0.5) score += 10;
-      if (params.behavioralBiometrics > 0.5) score += 10;
-      if (params.locationInconsistentTransactions) score += 15;
-      if (params.merchantCategoryMismatch) score += 10;
-      if (params.userDailyLimitExceeded) score += 15;
-      if (params.recipientVerificationStatus === 'unverified') score += 15;
-      if (params.accountAge && params.accountAge < 30) score += 10;
-      if (params.socialTrustScore && params.socialTrustScore < 50) score += 15;
-
-      const finalScore = Math.min(100, score);
-      setAccountRiskScore(finalScore);
-      setRiskLevel(finalScore >= 60 ? 'high' : finalScore >= 35 ? 'medium' : 'low');
-    }
-  }, [contextBalance, contextTransactions, contextTotalSpending, contextTotalReceived, userData?.transactionDetails]);
+  }, [contextBalance, contextTransactions, contextTotalSpending, contextTotalReceived]);
 
   const formatTime = (timestamp) => {
     if (!timestamp) return "";
@@ -159,48 +140,125 @@ const Dashboard = () => {
       setUpiId(userData.upiId);
 
 
-      const lowRisk = contextTransactions.filter(tx => tx.riskLevel === 'low' || !tx.riskLevel).length;
-      const mediumRisk = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
-      const highRisk = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
-
-      setRiskDistribution([
-        { name: 'Safe', value: lowRisk, color: '#10b981' },
-        { name: 'Suspicious', value: mediumRisk, color: '#f59e0b' },
-        { name: 'Flagged', value: highRisk, color: '#ef4444' },
-      ].filter(item => item.value > 0));
-
-
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlyRisk = {};
-      months.forEach(m => { monthlyRisk[m] = { safe: 0, suspicious: 0, flagged: 0 }; });
-
-      contextTransactions.forEach(tx => {
-        const timestamp = tx.createdAt || tx.timestamp;
-        if (timestamp) {
-          const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-          const monthName = months[date.getMonth()];
-          if (tx.riskLevel === 'high') {
-            monthlyRisk[monthName].flagged += 1;
-          } else if (tx.riskLevel === 'medium') {
-            monthlyRisk[monthName].suspicious += 1;
-          } else {
-            monthlyRisk[monthName].safe += 1;
-          }
-        }
-      });
-
-      const currentMonth = new Date().getMonth();
-      const last6Months = [];
-      for (let i = 5; i >= 0; i--) {
-        const monthIdx = (currentMonth - i + 12) % 12;
-        last6Months.push({
-          name: months[monthIdx],
-          safe: monthlyRisk[months[monthIdx]].safe,
-          suspicious: monthlyRisk[months[monthIdx]].suspicious,
-          flagged: monthlyRisk[months[monthIdx]].flagged
-        });
+      // Calculate weekly spending data (last 7 days)
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const today = new Date();
+      const weekData = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().slice(0, 10);
+        const dayName = days[date.getDay()];
+        
+        const daySpending = contextTransactions
+          .filter(tx => {
+            if (tx.transactionType !== 'sent') return false;
+            const txDate = tx.createdAt?.toDate ? tx.createdAt.toDate() : new Date(tx.createdAt);
+            return txDate.toISOString().slice(0, 10) === dateStr;
+          })
+          .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+        
+        weekData.push({ day: dayName, amount: daySpending });
       }
-      setRiskTrendData(last6Months);
+      setWeeklySpendingData(weekData);
+
+      // Calculate security factors breakdown
+      const params = userData?.transactionDetails || {};
+      const factors = [];
+      
+      if (params.recipientBlacklistStatus) factors.push({ 
+        factor: 'Blacklisted Contact', 
+        impact: 30, 
+        color: '#ef4444',
+        description: 'You\'ve transacted with a flagged or blacklisted UPI ID. Avoid sending money to unverified contacts.',
+        severity: 'high'
+      });
+      if (params.vpnProxyUsage) factors.push({ 
+        factor: 'VPN/Proxy Detected', 
+        impact: 15, 
+        color: '#f59e0b',
+        description: 'Your connection is masked. While VPNs are legal, they can indicate suspicious activity to fraud systems.',
+        severity: 'medium'
+      });
+      if (params.geoLocationFlags === 'high-risk') factors.push({ 
+        factor: 'High-Risk Location', 
+        impact: 20, 
+        color: '#ef4444',
+        description: 'Transactions from your current location are flagged due to high fraud rates in this region.',
+        severity: 'high'
+      });
+      if (params.highRiskTransactionTimes) factors.push({ 
+        factor: 'Unusual Hours', 
+        impact: 10, 
+        color: '#f59e0b',
+        description: 'You\'re transacting during unusual hours (late night/early morning) when fraud attempts are more common.',
+        severity: 'medium'
+      });
+      if (params.fraudComplaintsCount > 0) factors.push({ 
+        factor: 'Fraud Reports', 
+        impact: params.fraudComplaintsCount * 5, 
+        color: '#ef4444',
+        description: `${params.fraudComplaintsCount} fraud complaint(s) have been filed against your account. Resolve disputes promptly.`,
+        severity: 'high'
+      });
+      if (params.deviceFingerprinting > 0.5) factors.push({ 
+        factor: 'Device Anomaly', 
+        impact: 10, 
+        color: '#f59e0b',
+        description: 'Your device fingerprint has changed or appears suspicious. Using consistent devices builds trust.',
+        severity: 'medium'
+      });
+      if (params.locationInconsistentTransactions) factors.push({ 
+        factor: 'Location Mismatch', 
+        impact: 15, 
+        color: '#ef4444',
+        description: 'Your transaction locations are inconsistent with your usual patterns. This triggers fraud alerts.',
+        severity: 'high'
+      });
+      if (params.userDailyLimitExceeded) factors.push({ 
+        factor: 'Limit Exceeded', 
+        impact: 15, 
+        color: '#f59e0b',
+        description: 'You\'ve exceeded your daily transaction limit. High volume transactions attract extra scrutiny.',
+        severity: 'medium'
+      });
+      if (params.accountAge && params.accountAge < 30) factors.push({ 
+        factor: 'New Account', 
+        impact: 10, 
+        color: '#3b82f6',
+        description: 'Your account is less than 30 days old. Trust score improves as your account ages with good behavior.',
+        severity: 'low'
+      });
+      if (params.socialTrustScore && params.socialTrustScore < 50) factors.push({ 
+        factor: 'Low Trust Score', 
+        impact: 15, 
+        color: '#f59e0b',
+        description: 'Your trust score is below average. Build it by transacting with verified users and avoiding flagged contacts.',
+        severity: 'medium'
+      });
+      
+      if (factors.length === 0) factors.push({ factor: 'All Clear', impact: 0, color: '#10b981', description: '', severity: 'safe' });
+      setSecurityFactors(factors.sort((a, b) => b.impact - a.impact).slice(0, 5));
+
+      // Calculate top transaction partners
+      const partnerMap = new Map();
+      contextTransactions.forEach(tx => {
+        const partner = tx.transactionType === 'sent' ? tx.recipientUPI : tx.senderUPI;
+        if (!partner) return;
+        if (!partnerMap.has(partner)) {
+          partnerMap.set(partner, { upi: partner, sent: 0, received: 0, count: 0 });
+        }
+        const data = partnerMap.get(partner);
+        data.count++;
+        if (tx.transactionType === 'sent') data.sent += Number(tx.amount || 0);
+        else data.received += Number(tx.amount || 0);
+      });
+      
+      const partners = Array.from(partnerMap.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      setTopPartners(partners);
     }
   }, [userData?.upiId, contextTransactions]);
 
@@ -210,10 +268,6 @@ const Dashboard = () => {
     { icon: Settings, label: "ML Settings", color: "from-violet-500 to-purple-600", path: "/settings" },
     { icon: Shield, label: "View Reports", color: "from-emerald-500 to-green-600", path: "/admin" },
   ];
-
-
-  const highRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'high').length;
-  const mediumRiskCount = contextTransactions.filter(tx => tx.riskLevel === 'medium').length;
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
@@ -487,7 +541,7 @@ const Dashboard = () => {
 
           {/* Analytics & Transactions Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Risk Detection Trend Chart */}
+            {/* Transaction Insights */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -496,64 +550,117 @@ const Dashboard = () => {
             >
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
                 <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-blue-500" />
-                      Fraud Detection Trend
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-xs">
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500"></span> Safe</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-amber-500"></span> Suspicious</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-500"></span> Flagged</span>
-                    </div>
-                  </div>
+                  <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Gauge className="h-5 w-5 text-violet-500" />
+                    Transaction Insights
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={riskTrendData.length > 0 ? riskTrendData : [{ name: 'No Data', safe: 0, suspicious: 0, flagged: 0 }]}>
-                      <defs>
-                        <linearGradient id="colorSafe" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="colorSuspicious" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="colorFlagged" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                      <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            return (
-                              <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-lg">
-                                <p className="text-slate-500 text-xs mb-2 font-medium">{payload[0].payload.name}</p>
-                                <div className="space-y-1">
-                                  <p className="text-emerald-600 text-sm">Safe: {payload[0].payload.safe}</p>
-                                  <p className="text-amber-600 text-sm">Suspicious: {payload[0].payload.suspicious}</p>
-                                  <p className="text-red-600 text-sm">Flagged: {payload[0].payload.flagged}</p>
-                                </div>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Area type="monotone" dataKey="safe" stroke="#10b981" strokeWidth={2} fillOpacity={1} fill="url(#colorSafe)" stackId="1" />
-                      <Area type="monotone" dataKey="suspicious" stroke="#f59e0b" strokeWidth={2} fillOpacity={1} fill="url(#colorSuspicious)" stackId="1" />
-                      <Area type="monotone" dataKey="flagged" stroke="#ef4444" strokeWidth={2} fillOpacity={1} fill="url(#colorFlagged)" stackId="1" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  {transactions.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {/* Average Transaction */}
+                      <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-3 border border-blue-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-blue-500 rounded-lg">
+                            <CreditCard className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-blue-600 font-medium">Avg. Amount</span>
+                        </div>
+                        <p className="text-lg font-bold text-blue-700">
+                          ₹{Math.round(transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0) / transactions.length).toLocaleString('en-IN')}
+                        </p>
+                      </div>
+
+                      {/* Unique Contacts */}
+                      <div className="bg-gradient-to-br from-violet-50 to-violet-100/50 rounded-xl p-3 border border-violet-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-violet-500 rounded-lg">
+                            <Activity className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-violet-600 font-medium">Contacts</span>
+                        </div>
+                        <p className="text-lg font-bold text-violet-700">
+                          {new Set(transactions.map(tx => tx.transactionType === 'sent' ? tx.recipientUPI : tx.senderUPI)).size}
+                        </p>
+                      </div>
+
+                      {/* Largest Transaction */}
+                      <div className="bg-gradient-to-br from-amber-50 to-amber-100/50 rounded-xl p-3 border border-amber-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-amber-500 rounded-lg">
+                            <AlertTriangle className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-amber-600 font-medium">Largest Txn</span>
+                        </div>
+                        <p className="text-lg font-bold text-amber-700">
+                          ₹{Math.max(...transactions.map(tx => Number(tx.amount || 0))).toLocaleString('en-IN')}
+                        </p>
+                      </div>
+
+                      {/* Received Count */}
+                      <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-3 border border-emerald-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-emerald-500 rounded-lg">
+                            <ArrowDownLeft className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-emerald-600 font-medium">Received</span>
+                        </div>
+                        <p className="text-lg font-bold text-emerald-700">
+                          {transactions.filter(tx => tx.transactionType === 'received').length}
+                        </p>
+                      </div>
+
+                      {/* Sent Count */}
+                      <div className="bg-gradient-to-br from-rose-50 to-rose-100/50 rounded-xl p-3 border border-rose-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-rose-500 rounded-lg">
+                            <ArrowUpRight className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-rose-600 font-medium">Sent</span>
+                        </div>
+                        <p className="text-lg font-bold text-rose-700">
+                          {transactions.filter(tx => tx.transactionType === 'sent').length}
+                        </p>
+                      </div>
+
+                      {/* Most Active Day */}
+                      <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-3 border border-slate-200">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 bg-slate-600 rounded-lg">
+                            <Activity className="h-3 w-3 text-white" />
+                          </div>
+                          <span className="text-[10px] text-slate-600 font-medium">Active Day</span>
+                        </div>
+                        <p className="text-lg font-bold text-slate-700">
+                          {(() => {
+                            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                            const dayCounts = transactions.reduce((acc, tx) => {
+                              const date = tx.createdAt?.toDate ? tx.createdAt.toDate() : new Date(tx.createdAt);
+                              const day = date.getDay();
+                              acc[day] = (acc[day] || 0) + 1;
+                              return acc;
+                            }, {});
+                            const maxDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0];
+                            return maxDay ? days[maxDay[0]] : 'N/A';
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Gauge className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                      <p className="text-slate-500 font-medium text-sm">No insights yet</p>
+                      <p className="text-slate-400 text-xs mt-1">Make transactions to see your insights</p>
+                      <Button size="sm" className="mt-4 bg-blue-500 hover:bg-blue-600 h-8 text-xs" onClick={() => navigate('/send-money')}>
+                        <Send className="h-3 w-3 mr-1" /> Make a Payment
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
 
-            {/* Risk Distribution */}
+            {/* Frequent Contacts */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -562,118 +669,135 @@ const Dashboard = () => {
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg h-full">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-violet-500" />
-                    Risk Distribution
+                    <Activity className="h-5 w-5 text-blue-500" />
+                    Frequent Contacts
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <PieChart>
-                      <Pie
-                        data={riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={50}
-                        outerRadius={70}
-                        paddingAngle={5}
-                        dataKey="value"
+                <CardContent className="space-y-2">
+                  {topPartners.length > 0 ? (
+                    topPartners.map((partner, i) => (
+                      <motion.div
+                        key={partner.upi}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 * i }}
+                        className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors"
                       >
-                        {(riskDistribution.length > 0 ? riskDistribution : [{ name: 'No Data', value: 1, color: '#94a3b8' }]).map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            return (
-                              <div className="bg-white border border-slate-200 p-2 rounded-lg shadow-lg">
-                                <p className="text-slate-700 text-sm font-medium">{payload[0].name}</p>
-                                <p className="text-slate-500 text-xs">{payload[0].value} transactions</p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap gap-2 mt-2 justify-center">
-                    {riskDistribution.map((item) => (
-                      <Badge key={item.name} variant="outline" className="text-xs" style={{ borderColor: item.color, color: item.color }}>
-                        {item.name}: {item.value}
-                      </Badge>
-                    ))}
-                  </div>
-                  {riskDistribution.length === 0 && (
-                    <p className="text-center text-slate-400 text-sm">No transaction data yet</p>
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-violet-500 text-white text-xs font-bold">
+                            {partner.upi.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{partner.upi}</p>
+                          <p className="text-xs text-slate-500">{partner.count} transactions</p>
+                        </div>
+                        <div className="text-right">
+                          {partner.sent > 0 && (
+                            <p className="text-xs text-rose-600">-₹{partner.sent.toLocaleString('en-IN')}</p>
+                          )}
+                          {partner.received > 0 && (
+                            <p className="text-xs text-emerald-600">+₹{partner.received.toLocaleString('en-IN')}</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <Activity className="h-10 w-10 mx-auto text-slate-300 mb-2" />
+                      <p className="text-sm font-medium text-slate-500">No contacts yet</p>
+                      <p className="text-xs text-slate-400 mt-1">Start transacting to see contacts</p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
             </motion.div>
           </div>
 
-          {/* Frequent Contacts & Recent Transactions */}
+          {/* Security Factors & Weekly Spending */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Recent High-Risk Transactions */}
+            {/* Security Score Breakdown */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                      <ShieldAlert className="h-5 w-5 text-amber-500" />
-                      Fraud Alerts
-                    </CardTitle>
-                    <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600 -mr-2" onClick={() => navigate('/admin')}>
-                      View All
-                    </Button>
-                  </div>
+              <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg h-full">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-violet-500" />
+                    Security Factors
+                  </CardTitle>
+                  <p className="text-xs text-slate-500">Factors affecting your risk score</p>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {transactions.filter(tx => tx.riskLevel === 'high' || tx.riskLevel === 'medium').length > 0 ? (
-                    transactions
-                      .filter(tx => tx.riskLevel === 'high' || tx.riskLevel === 'medium')
-                      .slice(0, 4)
-                      .map((tx, i) => (
-                        <motion.div
-                          key={tx.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 * i }}
-                          className={`w-full flex items-center gap-3 p-3 rounded-xl border ${tx.riskLevel === 'high' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'
-                            }`}
-                        >
-                          <div className={`p-2 rounded-lg ${tx.riskLevel === 'high' ? 'bg-red-100' : 'bg-amber-100'}`}>
-                            <AlertTriangle className={`h-4 w-4 ${tx.riskLevel === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+                <CardContent className="pt-0">
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {securityFactors.length > 0 && securityFactors[0].factor !== 'All Clear' ? (
+                      securityFactors.map((item, idx) => (
+                        <div key={idx} className={`p-2.5 rounded-lg border transition-all ${
+                          item.severity === 'high' ? 'bg-red-50/50 border-red-200' :
+                          item.severity === 'medium' ? 'bg-amber-50/50 border-amber-200' :
+                          'bg-blue-50/50 border-blue-200'
+                        }`}>
+                          <div className="flex items-start gap-2">
+                            <div className={`p-1 rounded flex-shrink-0 ${
+                              item.severity === 'high' ? 'bg-red-100' :
+                              item.severity === 'medium' ? 'bg-amber-100' :
+                              'bg-blue-100'
+                            }`}>
+                              {item.severity === 'high' ? (
+                                <AlertTriangle className="h-3 w-3 text-red-600" />
+                              ) : item.severity === 'medium' ? (
+                                <AlertTriangle className="h-3 w-3 text-amber-600" />
+                              ) : (
+                                <Shield className="h-3 w-3 text-blue-600" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-xs font-semibold text-slate-800">{item.factor}</span>
+                                <Badge className={`text-[9px] px-1 py-0 h-4 ${
+                                  item.severity === 'high' ? 'bg-red-100 text-red-700' :
+                                  item.severity === 'medium' ? 'bg-amber-100 text-amber-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  +{item.impact}
+                                </Badge>
+                              </div>
+                              <p className="text-[10px] text-slate-500 mt-0.5 leading-tight line-clamp-2">{item.description}</p>
+                              <div className="mt-1.5 w-full bg-slate-200/50 rounded-full h-0.5">
+                                <div
+                                  className="h-0.5 rounded-full transition-all"
+                                  style={{ width: `${Math.min(item.impact * 3, 100)}%`, backgroundColor: item.color }}
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex-1 text-left">
-                            <p className="text-sm font-medium text-slate-800 truncate">
-                              {tx.transactionType === 'received' ? tx.senderUPI : tx.recipientUPI}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              ₹{Number(tx.amount).toLocaleString('en-IN')} • {tx.riskLevel} risk
-                            </p>
-                          </div>
-                          <Badge className={`${tx.riskLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'} border-0`}>
-                            {tx.riskScore || '?'}%
-                          </Badge>
-                        </motion.div>
+                        </div>
                       ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <ShieldCheck className="h-10 w-10 mx-auto text-emerald-400 mb-2" />
-                      <p className="text-sm font-medium text-emerald-600">All Clear!</p>
-                      <p className="text-xs text-slate-500 mt-1">No high-risk transactions detected</p>
-                    </div>
+                    ) : (
+                      <div className="text-center py-6 bg-emerald-50/50 rounded-xl border border-emerald-200">
+                        <ShieldCheck className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
+                        <p className="text-emerald-700 font-semibold text-sm">All Clear!</p>
+                        <p className="text-slate-500 text-[10px] mt-1 px-2">No security concerns detected</p>
+                      </div>
+                    )}
+                  </div>
+                  {securityFactors.length > 0 && securityFactors[0].factor !== 'All Clear' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full mt-2 text-violet-600 hover:text-violet-700 hover:bg-violet-50 h-8 text-xs"
+                      onClick={() => navigate('/settings')}
+                    >
+                      Improve Security <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
                   )}
                 </CardContent>
               </Card>
             </motion.div>
 
-            {/* Recent Transactions */}
+            {/* Weekly Spending Overview */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -681,68 +805,52 @@ const Dashboard = () => {
               className="lg:col-span-2"
             >
               <Card className="bg-white/80 backdrop-blur-xl border-slate-200/50 shadow-lg">
-                <CardHeader className="pb-2 pt-3 px-4">
+                <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-semibold text-slate-800">Recent Activity</CardTitle>
-                    <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-600 -mr-2 h-7 text-xs" onClick={() => navigate('/transactions')}>
-                      View All <ArrowRight className="h-3 w-3 ml-1" />
-                    </Button>
+                    <CardTitle className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                      <CreditCard className="h-5 w-5 text-blue-500" />
+                      Weekly Spending
+                    </CardTitle>
+                    <Badge variant="outline" className="text-xs text-slate-500">
+                      Last 7 days
+                    </Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="px-4 pb-3">
-                  <ScrollArea className="h-[185px] pr-2">
-                    {transactions.length > 0 ? (
-                      <div className="space-y-1">
-                        {transactions.slice(0, 6).map((tx, i) => (
-                          <motion.div
-                            key={tx.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.05 * i }}
-                            className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors group"
-                          >
-                            <div className="flex items-center gap-2">
-                              <div className={`p-1.5 rounded-lg ${tx.transactionType === 'received' ? 'bg-emerald-100' : 'bg-rose-100'}`}>
-                                {tx.transactionType === 'received'
-                                  ? <ArrowDownLeft className="h-3 w-3 text-emerald-600" />
-                                  : <ArrowUpRight className="h-3 w-3 text-rose-600" />
-                                }
-                              </div>
-                              <div>
-                                <p className="text-xs font-medium text-slate-800 truncate max-w-[120px] md:max-w-[180px]">
-                                  {tx.transactionType === 'received' ? tx.senderUPI : tx.recipientUPI}
-                                </p>
-                                <p className="text-[10px] text-slate-500">
-                                  {tx.createdAt ? (tx.createdAt.toDate ? tx.createdAt.toDate().toLocaleDateString() : new Date(tx.createdAt).toLocaleDateString()) : 'N/A'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <p className={`text-xs font-semibold ${tx.transactionType === 'received' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                {tx.transactionType === 'received' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
-                              </p>
-                              {tx.transactionType === 'sent' && (
-                                <button
-                                  onClick={() => handleDeleteTransaction(tx.id)}
-                                  className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all"
-                                >
-                                  <Trash2 className="h-3 w-3 text-slate-400 hover:text-red-500" />
-                                </button>
-                              )}
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6">
-                        <Activity className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                        <p className="text-slate-500 font-medium text-sm">No transactions yet</p>
-                        <Button size="sm" className="mt-3 bg-blue-500 hover:bg-blue-600 h-7 text-xs" onClick={() => navigate('/send-money')}>
-                          <Send className="h-3 w-3 mr-1" /> Make a Payment
-                        </Button>
-                      </div>
-                    )}
-                  </ScrollArea>
+                <CardContent>
+                  {weeklySpendingData.some(d => d.amount > 0) ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={weeklySpendingData}>
+                        <defs>
+                          <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" />
+                            <stop offset="100%" stopColor="#1d4ed8" />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="day" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v >= 1000 ? (v/1000).toFixed(0) + 'k' : v}`} />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-lg">
+                                  <p className="text-slate-500 text-xs mb-1 font-medium">{payload[0].payload.day}</p>
+                                  <p className="text-blue-600 text-lg font-bold">₹{Number(payload[0].value).toLocaleString('en-IN')}</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar dataKey="amount" fill="url(#spendingGradient)" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[200px] flex flex-col items-center justify-center">
+                      <CreditCard className="h-12 w-12 text-slate-200 mb-3" />
+                      <p className="text-slate-500 font-medium">No spending this week</p>
+                      <p className="text-slate-400 text-sm">Your spending will appear here</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>

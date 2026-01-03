@@ -1,21 +1,13 @@
+import { getRedirectResult, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { getDefaultTransactionDetails } from "../../lib/riskCalculator";
 import { auth, db } from "./firebase";
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-
-
-import mappedTransactions from "./mapped_transactions.json" 
 
 
 const generateUPIId = (name) => {
   const randomSuffix = Math.floor(1000 + Math.random() * 9000); 
   const baseName = name.split(" ")[0].toLowerCase(); 
   return `${baseName}${randomSuffix}@upi`;
-};
-
-
-const getRandomTransaction = () => {
-  const randomIndex = Math.floor(Math.random() * mappedTransactions.length);
-  return mappedTransactions[randomIndex];
 };
 
 
@@ -33,9 +25,11 @@ export const createOrUpdateUser = async (user) => {
 
     if (!userDoc.exists()) {
       const upiId = generateUPIId(user.displayName || "user");
-      const { user_friendly, model_processed } = getRandomTransaction();
-
-      console.debug('createOrUpdateUser: Creating new user with UPI', upiId);
+      
+      // Use default transaction details for new users (100 trust, 0 risk)
+      const defaultDetails = getDefaultTransactionDetails();
+      
+      console.debug('createOrUpdateUser: Creating new user with UPI', upiId, 'and 100 trust score');
 
       await setDoc(userRef, {
         uid: user.uid,
@@ -44,11 +38,33 @@ export const createOrUpdateUser = async (user) => {
         photoURL: user.photoURL,
         upiId: upiId,
         createdAt: serverTimestamp(),
-        transactionDetails: user_friendly,
-        modelData: model_processed,
+        transactionDetails: defaultDetails,
+        // Model data with safe defaults
+        modelData: {
+          amount: 0,
+          transaction_frequency: 0,
+          recipient_verification_status: 'verified',
+          recipient_blacklist_status: 0,
+          device_fingerprinting: 0.2,
+          vpn_proxy_usage: 0,
+          geo_location_flags: 'normal',
+          behavioral_biometrics: 0.2,
+          time_since_last_transaction: 60,
+          social_trust_score: 100,
+          account_age: 1,
+          high_risk_transaction_times: 0,
+          past_fraudulent_behavior_flags: 0,
+          location_inconsistent_transactions: 0,
+          normalized_transaction_amount: 0,
+          transaction_context_anomalies: 0,
+          fraud_complaints_count: 0,
+          merchant_category_mismatch: 0,
+          user_daily_limit_exceeded: 0,
+          recent_high_value_transaction_flags: 0
+        },
       });
 
-      console.info("✅ New user created with UPI ID:", upiId);
+      console.info("✅ New user created with UPI ID:", upiId, "Trust Score: 100");
       return upiId;
     } else {
       const upiId = userDoc.data().upiId;

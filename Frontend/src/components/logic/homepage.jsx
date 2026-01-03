@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, History, IndianRupee, QrCode, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle } from 'lucide-react';
+import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, FlipHorizontal2, History, IndianRupee, QrCode, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "react-qr-code";
@@ -52,6 +52,7 @@ export default function Homepage() {
   const [showSimulation, setShowSimulation] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [camActive, setCamActive] = useState(false);
+  const [facingMode, setFacingMode] = useState('environment');
 
   useEffect(() => {
     if (showScanner) {
@@ -283,8 +284,26 @@ export default function Homepage() {
     } catch (e) { }
 
     scanLockRef.current = false;
+    setFacingMode('environment');
     setShowScanner(true);
     setCamActive(true);
+  };
+
+  const toggleCamera = () => {
+    // Stop current camera before switching
+    try {
+      document.querySelectorAll('video').forEach(v => {
+        if (v.srcObject instanceof MediaStream) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+          v.srcObject = null;
+        }
+      });
+    } catch (e) { }
+
+    setCamActive(false);
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+    // Re-enable camera after a short delay to allow cleanup
+    setTimeout(() => setCamActive(true), 100);
   };
 
 
@@ -716,7 +735,10 @@ export default function Homepage() {
           {showScanner && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={handleCloseScanner}>
               <div className="w-full max-w-md h-full flex flex-col relative" onClick={e => e.stopPropagation()}>
-                <div className="absolute top-4 right-4 z-10">
+                <div className="absolute top-4 right-4 z-10 flex gap-2">
+                  <Button variant="ghost" size="icon" onClick={toggleCamera} className="text-white hover:bg-white/20 rounded-full" title="Flip Camera">
+                    <FlipHorizontal2 className="h-6 w-6" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={handleCloseScanner} className="text-white hover:bg-white/20 rounded-full">
                     <X className="h-6 w-6" />
                   </Button>
@@ -724,6 +746,7 @@ export default function Homepage() {
                 <div className="flex-1 flex flex-col justify-center items-center p-4">
                   <h3 className="text-white font-semibold text-lg mb-8 flex items-center gap-2">
                     <Camera className="h-5 w-5" /> Scan QR Code
+                    <span className="text-xs text-slate-400 ml-2">({facingMode === 'environment' ? 'Back' : 'Front'})</span>
                   </h3>
                   <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
                     {camActive && (
@@ -734,7 +757,7 @@ export default function Homepage() {
                           if (result) handleScanResult(result);
                         }}
                         style={{ width: '100%', height: '100%' }}
-                        facingMode="environment"
+                        facingMode={facingMode}
                       />
                     )}
                     {/* Overlay Frame */}

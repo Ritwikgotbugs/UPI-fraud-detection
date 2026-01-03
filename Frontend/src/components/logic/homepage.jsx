@@ -751,13 +751,16 @@ export default function Homepage() {
                   <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
                     {camActive && (
                       <SafeQrReader
+                        key={facingMode}
                         delay={300}
                         onError={(error) => console.error("QR Scanner Error:", error)}
                         onScan={(result) => {
                           if (result) handleScanResult(result);
                         }}
                         style={{ width: '100%', height: '100%' }}
-                        facingMode={facingMode}
+                        constraints={{
+                          video: { facingMode: { exact: facingMode } }
+                        }}
                       />
                     )}
                     {/* Overlay Frame */}

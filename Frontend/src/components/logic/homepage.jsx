@@ -8,7 +8,7 @@ import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, Histo
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "react-qr-code";
-import { QrReader } from "react-qr-reader";
+import QrScanner from "react-qr-scanner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';
@@ -37,7 +37,7 @@ const SafeQrReader = (props) => {
       setTimeout(stopAllTracks, 100);
     };
   }, []);
-  return <QrReader {...props} />;
+  return <QrScanner {...props} />;
 };
 
 
@@ -728,12 +728,13 @@ export default function Homepage() {
                   <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
                     {camActive && (
                       <SafeQrReader
-                        constraints={{ video: { facingMode: 'environment' } }}
-                        onResult={(result, error) => {
+                        delay={300}
+                        onError={(error) => console.error("QR Scanner Error:", error)}
+                        onScan={(result) => {
                           if (result) handleScanResult(result);
                         }}
-                        containerStyle={{ width: '100%', height: '100%' }}
-                        videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%' }}
+                        facingMode="environment"
                       />
                     )}
                     {/* Overlay Frame */}

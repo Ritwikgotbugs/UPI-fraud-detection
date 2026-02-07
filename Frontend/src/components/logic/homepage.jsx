@@ -2,20 +2,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Check, ChevronRight, CreditCard, FileText, History, IndianRupee, MessageSquare, Rocket, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle, Zap } from 'lucide-react';
-import { useEffect, useState, useRef } from "react";
+import { AlertTriangle, Camera, Check, ChevronRight, CreditCard, FileText, FlipHorizontal2, History, IndianRupee, QrCode, ShieldAlert, ShieldCheck, User, Wallet, X, XCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import QRCode from "react-qr-code";
+import QrScanner from "react-qr-scanner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from '../../context/AuthContext';
 import TransactionSimulation from '../logic/TransactionSimulation';
 import MobileNav from './MobileNav';
 import SidebarContent from './SidebarContent';
 import { db } from "./firebase.js";
-import QRCode from "react-qr-code";
-import { QrReader } from "react-qr-reader";
-import { Scan, QrCode, Camera, Minimize2 } from 'lucide-react';
 
 const SafeQrReader = (props) => {
   useEffect(() => {
@@ -38,7 +37,7 @@ const SafeQrReader = (props) => {
       setTimeout(stopAllTracks, 100);
     };
   }, []);
-  return <QrReader {...props} />;
+  return <QrScanner {...props} />;
 };
 
 
@@ -53,6 +52,7 @@ export default function Homepage() {
   const [showSimulation, setShowSimulation] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [camActive, setCamActive] = useState(false);
+  const [facingMode, setFacingMode] = useState('environment');
 
   useEffect(() => {
     if (showScanner) {
@@ -284,8 +284,26 @@ export default function Homepage() {
     } catch (e) { }
 
     scanLockRef.current = false;
+    setFacingMode('environment');
     setShowScanner(true);
     setCamActive(true);
+  };
+
+  const toggleCamera = () => {
+    // Stop current camera before switching
+    try {
+      document.querySelectorAll('video').forEach(v => {
+        if (v.srcObject instanceof MediaStream) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+          v.srcObject = null;
+        }
+      });
+    } catch (e) { }
+
+    setCamActive(false);
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment');
+    // Re-enable camera after a short delay to allow cleanup
+    setTimeout(() => setCamActive(true), 100);
   };
 
 
@@ -432,6 +450,14 @@ export default function Homepage() {
       setVerificationStatus("invalid");
       return;
     }
+
+    const currentUpi = (userData?.upiId || upiId || '').toLowerCase();
+    if (normalizedUpi === currentUpi) {
+      setSelfTransferError(true);
+      setVerificationStatus(null);
+      return;
+    }
+    setSelfTransferError(false);
 
     setVerificationStatus("loading");
 
@@ -709,7 +735,10 @@ export default function Homepage() {
           {showScanner && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" onClick={handleCloseScanner}>
               <div className="w-full max-w-md h-full flex flex-col relative" onClick={e => e.stopPropagation()}>
-                <div className="absolute top-4 right-4 z-10">
+                <div className="absolute top-4 right-4 z-10 flex gap-2">
+                  <Button variant="ghost" size="icon" onClick={toggleCamera} className="text-white hover:bg-white/20 rounded-full" title="Flip Camera">
+                    <FlipHorizontal2 className="h-6 w-6" />
+                  </Button>
                   <Button variant="ghost" size="icon" onClick={handleCloseScanner} className="text-white hover:bg-white/20 rounded-full">
                     <X className="h-6 w-6" />
                   </Button>
@@ -717,16 +746,21 @@ export default function Homepage() {
                 <div className="flex-1 flex flex-col justify-center items-center p-4">
                   <h3 className="text-white font-semibold text-lg mb-8 flex items-center gap-2">
                     <Camera className="h-5 w-5" /> Scan QR Code
+                    <span className="text-xs text-slate-400 ml-2">({facingMode === 'environment' ? 'Back' : 'Front'})</span>
                   </h3>
                   <div className="w-full aspect-square max-w-sm rounded-3xl overflow-hidden border-2 border-white/20 relative shadow-2xl bg-black">
                     {camActive && (
                       <SafeQrReader
-                        constraints={{ video: { facingMode: 'environment' } }}
-                        onResult={(result, error) => {
+                        key={facingMode}
+                        delay={300}
+                        onError={(error) => console.error("QR Scanner Error:", error)}
+                        onScan={(result) => {
                           if (result) handleScanResult(result);
                         }}
-                        containerStyle={{ width: '100%', height: '100%' }}
-                        videoStyle={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%' }}
+                        constraints={{
+                          video: { facingMode: { exact: facingMode } }
+                        }}
                       />
                     )}
                     {/* Overlay Frame */}
@@ -834,6 +868,7 @@ export default function Homepage() {
                                       onChange={(e) => {
                                         setRecipientUpiId(e.target.value);
                                         setVerificationStatus(null);
+                                        setSelfTransferError(false);
                                       }}
                                       placeholder="Ex: mobileNumber@upi or username@bank"
                                       className="pl-4 pr-10 h-12 bg-white border-slate-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl text-sm transition-all shadow-sm"
@@ -868,6 +903,21 @@ export default function Homepage() {
 
                               {/* Verification Status Display */}
                               <AnimatePresence mode="wait">
+                                {selfTransferError && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="p-4 rounded-xl border bg-orange-50 border-orange-200">
+                                      <div className="flex items-center gap-3 text-orange-700">
+                                        <User className="h-5 w-5" />
+                                        <span className="font-medium">You cannot send money to yourself</span>
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                )}
                                 {verificationStatus && verificationStatus !== "idle" && (
                                   <motion.div
                                     initial={{ opacity: 0, height: 0 }}

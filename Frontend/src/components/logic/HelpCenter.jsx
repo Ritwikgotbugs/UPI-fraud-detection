@@ -479,16 +479,17 @@ Content-Type: application/json
                 <h2 className="text-xl font-semibold text-slate-800 mb-4">Tech Stack</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { name: 'React', desc: 'UI Framework' },
-                    { name: 'Tailwind CSS', desc: 'Styling' },
-                    { name: 'Firebase', desc: 'Auth & Database' },
-                    { name: 'Vite', desc: 'Build Tool' },
-                    { name: 'Flask', desc: 'Backend API' },
-                    { name: 'scikit-learn', desc: 'ML Model' },
-                    { name: 'NumPy', desc: 'Data Processing' },
-                    { name: 'Lucide', desc: 'Icons' }
+                    { name: 'React', desc: 'UI Framework', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg' },
+                    { name: 'Tailwind CSS', desc: 'Styling', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/tailwindcss/tailwindcss-original.svg' },
+                    { name: 'Firebase', desc: 'Auth & Database', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/firebase/firebase-plain.svg' },
+                    { name: 'Vite', desc: 'Build Tool', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/vitejs/vitejs-original.svg' },
+                    { name: 'Flask', desc: 'Backend API', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg' },
+                    { name: 'scikit-learn', desc: 'ML Model', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/scikitlearn/scikitlearn-original.svg' },
+                    { name: 'NumPy', desc: 'Data Processing', logo: 'https://cdn.jsdelivr.net/gh/devicons/devicon/icons/numpy/numpy-original.svg' },
+                    { name: 'Lucide', desc: 'Icons', logo: 'https://lucide.dev/logo.light.svg' }
                   ].map((tech, index) => (
-                    <div key={index} className="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                    <div key={index} className="bg-slate-50 rounded-xl p-4 text-center border border-slate-200 hover:border-violet-300 hover:shadow-md transition-all">
+                      <img src={tech.logo} alt={tech.name} className="w-10 h-10 mx-auto mb-3 object-contain" />
                       <div className="font-semibold text-slate-800">{tech.name}</div>
                       <div className="text-xs text-slate-500">{tech.desc}</div>
                     </div>

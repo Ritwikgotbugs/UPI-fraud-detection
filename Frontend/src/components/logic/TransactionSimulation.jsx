@@ -1,11 +1,12 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
+import { addDoc, collection, getDocs, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ArrowRight, ArrowUpRight, CheckCircle, Clock, FileText, Loader2, Send, Shield, ShieldAlert, ShieldCheck, Sparkles, User, UserX, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '../../context/AuthContext';
+import { calculateTrustScore, RISK_WEIGHTS } from '../../lib/riskCalculator';
 import { db } from './firebase';
 
 const API_BASE = 'https://rxcq.pythonanywhere.com';
@@ -76,20 +77,204 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   const [checkingRecipient, setCheckingRecipient] = useState(true)
   const [activeRules, setActiveRules] = useState([]);
   const [isAdminBlocked, setIsAdminBlocked] = useState(false);
+  const [alertsCreatedForTransaction, setAlertsCreatedForTransaction] = useState(false);
   const { refreshData, userData } = useAuth();
 
+  // Real-time rules listener - always gets latest enabled rules
   useEffect(() => {
-    const fetchRules = async () => {
-      try {
-        const rulesSnap = await getDocs(collection(db, 'rules'));
-        const rules = rulesSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(r => r.enabled);
+    const unsubscribe = onSnapshot(
+      collection(db, 'rules'),
+      (snapshot) => {
+        const rules = snapshot.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter(r => r.enabled === true); // Only include explicitly enabled rules
+        console.log('Active rules updated:', rules.length, 'enabled rules');
         setActiveRules(rules);
-      } catch (e) {
-        console.error("Error fetching rules:", e);
+      },
+      (error) => {
+        console.error("Error listening to rules:", error);
       }
-    };
-    fetchRules();
+    );
+    
+    return () => unsubscribe();
   }, []);
+
+  // Create alerts immediately when rules trigger on risk analysis
+  useEffect(() => {
+    const createAlertsForTriggeredRules = async () => {
+      // Only run once per transaction, when we have risk analysis and active rules
+      if (!riskAnalysis || !activeRules.length || alertsCreatedForTransaction) return;
+      
+      console.log('🔔 Evaluating rules for immediate alert creation...');
+      
+      const params = recipientProfileData?.params || {};
+      const context = {
+        amount: Number(amount),
+        hour: new Date().getHours(),
+        risk_score: riskAnalysis?.risk_score || 0,
+        social_trust_score: Number(params.socialTrustScore || 0),
+        recipient_blacklist_status: Number(params.recipientBlacklistStatus || 0),
+        fraud_complaints_count: Number(params.fraudComplaintsCount || 0),
+        account_age: Number(params.accountAge || 0),
+        vpn_proxy_usage: Number(params.vpnProxyUsage || 0)
+      };
+      
+      const triggeredFlags = [];
+      const triggeredBlocks = [];
+      const triggeredRiskMods = [];
+      
+      activeRules.forEach(rule => {
+        if (rule.enabled !== true) return;
+        
+        let isTriggered = false;
+        
+        if (rule.conditions && Array.isArray(rule.conditions)) {
+          isTriggered = rule.conditions.every(cond => {
+            const val = context[cond.field];
+            const target = Number(cond.value);
+            const op = cond.operator;
+            if (op === '>') return val > target;
+            if (op === '<') return val < target;
+            if (op === '>=') return val >= target;
+            if (op === '<=') return val <= target;
+            if (op === '==') return val == target;
+            if (op === '!=') return val != target;
+            return false;
+          });
+        } else if (rule.condition) {
+          const val = context[rule.condition.field];
+          const target = Number(rule.condition.value);
+          const op = rule.condition.operator;
+          if (op === '>') isTriggered = val > target;
+          else if (op === '<') isTriggered = val < target;
+          else if (op === '>=') isTriggered = val >= target;
+          else if (op === '<=') isTriggered = val <= target;
+          else if (op === '==') isTriggered = val == target;
+          else if (op === '!=') isTriggered = val != target;
+        }
+        
+        if (isTriggered) {
+          console.log(`🎯 Rule "${rule.name}" (action: ${rule.action}) TRIGGERED`);
+          if (rule.action === 'flag') triggeredFlags.push(rule);
+          else if (rule.action === 'block') triggeredBlocks.push(rule);
+          else if (rule.action === 'add_risk') triggeredRiskMods.push(rule);
+        }
+      });
+      
+      // Create FLAG alerts immediately
+      if (triggeredFlags.length > 0) {
+        console.log('🚩 Creating FLAG alert in Firestore for', triggeredFlags.length, 'flag rules');
+        try {
+          const docRef = await addDoc(collection(db, 'alerts'), {
+            type: 'FLAG',
+            severity: 'medium',
+            title: 'Security Pattern Detected',
+            message: `Warning flag raised for ₹${amount} transaction - ${triggeredFlags.length} pattern(s) matched.`,
+            details: triggeredFlags.map(f => f.name).join(', '),
+            pattern: triggeredFlags.map(f => f.name).join('; '),
+            transaction_amount: Number(amount),
+            sender_upi: senderUPI,
+            recipient_upi: upiId,
+            risk_score: riskAnalysis?.risk_score || 0,
+            triggered_rules: triggeredFlags.map(f => ({ id: f.id, name: f.name })),
+            createdAt: serverTimestamp(),
+            read: false
+          });
+          console.log('✅ FLAG alert created in Firestore:', docRef.id);
+        } catch (e) {
+          console.error('❌ Failed to create FLAG alert:', e);
+        }
+      }
+      
+      // Handle BLOCK - set blocked state
+      if (triggeredBlocks.length > 0) {
+        console.log('🚫 BLOCK rule triggered - blocking transaction');
+        setIsAdminBlocked(true);
+        try {
+          const docRef = await addDoc(collection(db, 'alerts'), {
+            type: 'BLOCK',
+            severity: 'high',
+            title: 'Transaction Blocked',
+            message: `Transaction of ₹${amount} blocked by security rules.`,
+            details: triggeredBlocks.map(b => b.name).join(', '),
+            transaction_amount: Number(amount),
+            sender_upi: senderUPI,
+            recipient_upi: upiId,
+            risk_score: riskAnalysis?.risk_score || 0,
+            triggered_rules: triggeredBlocks.map(b => ({ id: b.id, name: b.name })),
+            createdAt: serverTimestamp(),
+            read: false
+          });
+          console.log('✅ BLOCK alert created in Firestore:', docRef.id);
+        } catch (e) {
+          console.error('❌ Failed to create BLOCK alert:', e);
+        }
+        setCurrentStep('blocked');
+      }
+      
+      // Create RISK_MODIFIER alerts and ACTUALLY update trust score in Firestore
+      if (triggeredRiskMods.length > 0) {
+        console.log('⚠️ RISK_MODIFIER rules triggered:', triggeredRiskMods.length);
+        
+        // Calculate trust score decrease based on risk score
+        // Formula: Higher risk = more trust decrease
+        const mlRiskScore = riskAnalysis?.risk_score || 50;
+        const trustDecrease = Math.min(30, Math.max(5, Math.round(mlRiskScore / 3))); // 5-30 decrease based on risk
+        
+        try {
+          // 1. Find and update the recipient's trust score in Firestore
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("upiId", "==", upiId.toLowerCase()));
+          const snapshot = await getDocs(q);
+          
+          let oldTrustScore = 100;
+          let newTrustScore = 100;
+          
+          if (!snapshot.empty) {
+            const { updateDoc } = await import("firebase/firestore");
+            const userDoc = snapshot.docs[0];
+            const userData = userDoc.data();
+            oldTrustScore = userData?.transactionDetails?.socialTrustScore || 100;
+            newTrustScore = Math.max(0, oldTrustScore - trustDecrease);
+            
+            // Actually update the user's trust score in Firestore
+            await updateDoc(userDoc.ref, {
+              'transactionDetails.socialTrustScore': newTrustScore
+            });
+            console.log(`✅ Trust score updated in Firestore: ${oldTrustScore} → ${newTrustScore} (-${trustDecrease})`);
+          } else {
+            console.log('⚠️ Recipient user not found in Firestore, cannot update trust score');
+          }
+          
+          // 2. Create the RISK_MODIFIER alert with full details
+          const docRef = await addDoc(collection(db, 'alerts'), {
+            type: 'RISK_MODIFIER',
+            severity: 'medium',
+            title: 'Trust Score Decreased',
+            message: `Trust score decreased from ${oldTrustScore} to ${newTrustScore} (-${trustDecrease}) for suspicious activity.`,
+            details: triggeredRiskMods.map(r => r.name).join(', '),
+            transaction_amount: Number(amount),
+            sender_upi: senderUPI,
+            recipient_upi: upiId,
+            risk_score: mlRiskScore,
+            old_trust_score: oldTrustScore,
+            new_trust_score: newTrustScore,
+            trust_decrease: trustDecrease,
+            triggered_rules: triggeredRiskMods.map(r => ({ id: r.id, name: r.name })),
+            createdAt: serverTimestamp(),
+            read: false
+          });
+          console.log('✅ RISK_MODIFIER alert created in Firestore:', docRef.id);
+        } catch (e) {
+          console.error('❌ Failed to update trust score or create alert:', e);
+        }
+      }
+      
+      setAlertsCreatedForTransaction(true);
+    };
+    
+    createAlertsForTriggeredRules();
+  }, [riskAnalysis, activeRules, alertsCreatedForTransaction, amount, senderUPI, upiId, recipientProfileData]);
 
 
   useEffect(() => {
@@ -153,196 +338,77 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
 
   const generateOfflineRiskAnalysis = (profileData = recipientProfileData) => {
-    let riskScore = 10;
+    // Use the centralized risk calculator
+    const params = profileData?.params || profileData?.transactionDetails || {};
+    
+    // Calculate trust score from recipient's profile
+    const { trustScore, riskScore: calculatedRisk, breakdown } = calculateTrustScore(params, []);
+    
+    // Risk score shown to sender = 100 - recipient's trust score
+    let riskScore = calculatedRisk;
     const factors = [];
 
-
-    if (profileData?.params && Object.keys(profileData.params).length > 0) {
-      const params = profileData.params;
-
-      if (params.recipientBlacklistStatus) {
-        riskScore += 40;
-        factors.push('⚠️ Recipient is on a blacklist');
+    // Add factors from the breakdown
+    breakdown.forEach(item => {
+      if (item.impact < 0) {
+        factors.push(`${item.factor} (${Math.abs(item.impact).toFixed(1)}% weight)`);
       }
+    });
 
-      if ((params.fraudComplaintsCount || 0) > 0) {
-        riskScore += Math.min((params.fraudComplaintsCount || 0) * 5, 25);
-        factors.push(`${params.fraudComplaintsCount} fraud complaints filed against recipient`);
-      }
-
-      if ((params.pastFraudulentBehavior || 0) > 0) {
-        riskScore += (params.pastFraudulentBehavior || 0) * 8;
-        factors.push(`${params.pastFraudulentBehavior} past fraud flags on recipient's account`);
-      }
-
-      if (params.recipientVerificationStatus === 'unverified') {
-        riskScore += 20;
-        factors.push('Recipient account is unverified');
-      } else if (params.recipientVerificationStatus === 'recently_registered') {
-        riskScore += 10;
-        factors.push('Recipient account was recently registered');
-      }
-
-      if (params.geoLocationFlags === 'high-risk') {
-        riskScore += 15;
-        factors.push('Recipient is in a high-risk geographic location');
-      } else if (params.geoLocationFlags === 'unusual') {
-        riskScore += 8;
-        factors.push('Recipient has unusual location patterns');
-      }
-
-      if (params.vpnProxyUsage) {
-        riskScore += 10;
-        factors.push('Recipient uses VPN/Proxy services');
-      }
-
-      if ((params.deviceFingerprinting || 0) > 0.7) {
-        riskScore += 10;
-        factors.push('Recipient using untrusted device');
-      }
-
-      if ((params.behavioralBiometrics || 0) > 0.6) {
-        riskScore += 8;
-        factors.push('Recipient shows unusual behavioral patterns');
-      }
-
-      if (params.accountAge && params.accountAge < 30) {
-        riskScore += 15;
-        factors.push(`Recipient account is only ${params.accountAge} days old`);
-      } else if (params.accountAge && params.accountAge < 90) {
-        riskScore += 5;
-        factors.push('Recipient account is relatively new');
-      }
-
-      if ((params.socialTrustScore || 0) < 30) {
-        riskScore += 15;
-        factors.push(`Recipient has low trust score (${params.socialTrustScore})`);
-      } else if ((params.socialTrustScore || 0) < 50) {
-        riskScore += 8;
-        factors.push(`Recipient has moderate trust score (${params.socialTrustScore})`);
-      }
-
-      if (params.highRiskTransactionTimes) {
-        riskScore += 5;
-        factors.push('Recipient frequently transacts at unusual hours');
-      }
-
-      if (params.locationInconsistentTransactions) {
-        riskScore += 12;
-        factors.push('Recipient has inconsistent transaction locations');
-      }
-
-      if (params.merchantCategoryMismatch) {
-        riskScore += 8;
-        factors.push('Recipient has category mismatch in transactions');
-      }
-
-      if (params.userDailyLimitExceeded) {
-        riskScore += 10;
-        factors.push('Recipient frequently exceeds daily limits');
-      }
-
-      if ((params.recentHighValueFlags || 0) > 0) {
-        riskScore += (params.recentHighValueFlags || 0) * 5;
-        factors.push(`${params.recentHighValueFlags} recent high-value transaction flags`);
-      }
-
-    } else if (profileData?.modelData && Object.keys(profileData.modelData).length > 0) {
-
-      const m = profileData.modelData;
-
-      if ((m['Recipient Blacklist Status'] || m['Recipient Blacklist Status'] === 1) && m['Recipient Blacklist Status'] > 0.5) {
-        riskScore += 40;
-        factors.push('⚠️ Recipient is likely blacklisted (model)');
-      }
-
-      if ((m['Fraud Complaints Count'] || 0) > 0.1) {
-        const c = Math.round((m['Fraud Complaints Count'] || 0) * 5) || 1;
-        riskScore += Math.min(c * 5, 25);
-        factors.push(`${c} fraud complaints flagged by model`);
-      }
-
-      if ((m['Past Fraudulent Behavior Flags'] || 0) > 0.5) {
-        riskScore += 16;
-        factors.push('Past fraudulent behavior flagged by model');
-      }
-
-      if ((m['Recipient Verification Status_suspicious'] || 0) > 0.5) {
-        riskScore += 15;
-        factors.push('Recipient verification appears suspicious (model)');
-      }
-
-      if ((m['VPN or Proxy Usage'] || 0) > 0.5) {
-        riskScore += 10;
-        factors.push('VPN/Proxy usage detected by model');
-      }
-
-      if ((m['Device Fingerprinting'] || 0) > 0.7) {
-        riskScore += 8;
-        factors.push('Untrusted device fingerprint detected (model)');
-      }
-
-
-      let socialTrust = null;
-      if (typeof m['Social Trust Score'] !== 'undefined') {
-        socialTrust = m['Social Trust Score'] > 1 ? Math.round(m['Social Trust Score']) : Math.round(m['Social Trust Score'] * 100);
-        if (socialTrust < 30) {
-          riskScore += 15;
-          factors.push(`Model indicates low trust (${socialTrust}/100)`);
-        } else if (socialTrust < 50) {
-          riskScore += 8;
-          factors.push(`Model indicates moderate trust (${socialTrust}/100)`);
-        }
-      }
-
-
-      if (typeof m['Account Age'] !== 'undefined' && m['Account Age'] < 0.2) {
-        riskScore += 12;
-        factors.push('Model indicates recipient account is very new');
-      }
-
-
-      if (factors.length === 0) {
-        factors.push('✓ No prominent flags from model');
-      }
-
-    } else {
-
-      factors.push('⚠️ Recipient profile data not available');
-      riskScore += 15;
+    // Add amount-based risk
+    const txAmount = Number(amount || 0);
+    if (txAmount > 50000) {
+      riskScore += RISK_WEIGHTS.transactionAmount;
+      factors.push(`Very high transaction amount ₹${txAmount.toLocaleString()} (${RISK_WEIGHTS.transactionAmount}% weight)`);
+    } else if (txAmount > 10000) {
+      const impact = RISK_WEIGHTS.transactionAmount * 0.6;
+      riskScore += impact;
+      factors.push(`High transaction amount ₹${txAmount.toLocaleString()} (${impact.toFixed(1)}% weight)`);
+    } else if (txAmount > 5000) {
+      const impact = RISK_WEIGHTS.transactionAmount * 0.3;
+      riskScore += impact;
+      factors.push(`Moderate transaction amount ₹${txAmount.toLocaleString()} (${impact.toFixed(1)}% weight)`);
     }
 
-
-    const numAmount = Number(amount);
-    if (numAmount > 50000) {
-      riskScore += 30;
-      factors.push('Very high transaction amount (₹50,000+)');
-    } else if (numAmount > 20000) {
-      riskScore += 15;
-      factors.push('High transaction amount (₹20,000+)');
+    // Additional profile-specific factors for display
+    if (params.recipientBlacklistStatus) {
+      if (!factors.some(f => f.includes('Blacklist'))) {
+        factors.unshift('⚠️ Recipient is on a blacklist');
+      }
     }
 
+    if ((params.fraudComplaintsCount || 0) > 0 && !factors.some(f => f.includes('complaint'))) {
+      factors.push(`${params.fraudComplaintsCount} fraud complaints filed against recipient`);
+    }
 
+    if (params.vpnProxyUsage && !factors.some(f => f.includes('VPN'))) {
+      factors.push('Recipient uses VPN/Proxy services');
+    }
+
+    if (params.accountAge && params.accountAge < 30 && !factors.some(f => f.includes('days old'))) {
+      factors.push(`Recipient account is only ${params.accountAge} days old`);
+    }
+
+    // Show recipient's trust score as a factor
+    const recipientTrust = params.socialTrustScore || trustScore;
+    if (recipientTrust < 50) {
+      factors.push(`Recipient trust score: ${Math.round(recipientTrust)}/100`);
+    }
+
+    // If no risk factors, add a positive note
+    if (factors.length === 0) {
+      factors.push('✅ No risk factors detected');
+    }
+
+    // Time-based risk
     const hour = new Date().getHours();
     if (hour >= 23 || hour < 5) {
-      riskScore += 20;
+      riskScore += RISK_WEIGHTS.highRiskTransactionTimes || 5;
       factors.push('Late night transaction (high-risk hours)');
     }
 
-
-    if (factors.length === 0) {
-      factors.push('✓ All security checks passed');
-    }
-
-    let finalScore = Math.min(100, riskScore);
-
-
-    const trustFromParams = profileData?.params?.socialTrustScore;
-    const trustFromModel = profileData?.modelData?.['Social Trust Score'];
-    const trustVal = typeof trustFromParams !== 'undefined' ? trustFromParams : (typeof trustFromModel !== 'undefined' ? (trustFromModel > 1 ? trustFromModel : Math.round(trustFromModel * 100)) : null);
-    if (trustVal != null && (factors.length === 1 && factors[0].startsWith('✓'))) {
-      finalScore = Math.min(100, 100 - Number(trustVal));
-    }
+    // Cap at 100
+    const finalScore = Math.min(100, Math.max(0, Math.round(riskScore)));
     const isHighRisk = finalScore >= 60;
     const isMediumRisk = finalScore >= 35 && finalScore < 60;
 
@@ -358,31 +424,46 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
           ? ['Verify transaction details carefully', 'Confirm you know this recipient']
           : ['Transaction appears safe'],
       offline: true,
-      recipientProfile: profileData?.params || null
+      recipientProfile: profileData?.params || profileData?.transactionDetails || null,
+      trustScore: trustScore,
+      breakdown: breakdown
     };
   };
 
 
   const evaluateRules = (analysisResults = riskAnalysis) => {
-    if (!activeRules.length) return { block: false, rules: [] };
+    console.log('Evaluating rules. Active rules count:', activeRules.length);
+    
+    if (!activeRules.length) {
+      console.log('No active rules to evaluate');
+      return { block: false, blockReasons: [], flags: [], riskModifiers: [] };
+    }
 
     const triggeredBlocks = [];
-    const triggeredFlags = [];
+    const triggeredFlags = [];  // For 'flag' action - goes to detected patterns
+    const triggeredRiskModifiers = [];  // For 'add_risk' action - affects trust score
 
     const params = recipientProfileData?.params || {};
+    const mlRiskScore = analysisResults?.risk_score || 0;
     const context = {
       amount: Number(amount),
       hour: new Date().getHours(),
-      risk_score: analysisResults?.risk_score || 0,
+      risk_score: mlRiskScore,
       social_trust_score: Number(params.socialTrustScore || 0),
       recipient_blacklist_status: Number(params.recipientBlacklistStatus || 0),
       fraud_complaints_count: Number(params.fraudComplaintsCount || 0),
       account_age: Number(params.accountAge || 0),
       vpn_proxy_usage: Number(params.vpnProxyUsage || 0)
     };
+    
+    console.log('Rule evaluation context:', context);
 
     activeRules.forEach(rule => {
-      if (rule.enabled === false) return;
+      // Skip disabled rules - triple check (should already be filtered, but safety first)
+      if (rule.enabled !== true) {
+        console.log(`Skipping rule "${rule.name}" - not enabled (enabled=${rule.enabled})`);
+        return;
+      }
 
       let isTriggered = false;
 
@@ -390,35 +471,76 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
       if (rule.conditions && Array.isArray(rule.conditions)) {
         isTriggered = rule.conditions.every(cond => {
           const val = context[cond.field];
-          const target = cond.value;
+          const target = Number(cond.value);
           const op = cond.operator;
           if (op === '>') return val > target;
           if (op === '<') return val < target;
+          if (op === '>=') return val >= target;
+          if (op === '<=') return val <= target;
           if (op === '==') return val == target;
+          if (op === '!=') return val != target;
           return false;
         });
       }
       // Legacy single condition support
       else if (rule.condition) {
         const val = context[rule.condition.field];
-        const target = rule.condition.value;
+        const target = Number(rule.condition.value);
         const op = rule.condition.operator;
         if (op === '>') isTriggered = val > target;
         else if (op === '<') isTriggered = val < target;
+        else if (op === '>=') isTriggered = val >= target;
+        else if (op === '<=') isTriggered = val <= target;
         else if (op === '==') isTriggered = val == target;
+        else if (op === '!=') isTriggered = val != target;
       }
 
+      console.log(`Rule "${rule.name}" (action: ${rule.action}, enabled: ${rule.enabled}): triggered = ${isTriggered}`);
+
       if (isTriggered) {
-        if (rule.action === 'block') triggeredBlocks.push(rule.name);
-        else triggeredFlags.push({ name: rule.name, modifier: rule.risk_modifier || 20 });
+        switch (rule.action) {
+          case 'block':
+            // Immediate Block: Block transaction + raise alert in alerts panel
+            console.log(`🚫 BLOCK triggered by rule: ${rule.name}`);
+            triggeredBlocks.push(rule.name);
+            break;
+          case 'flag':
+            // Raise Warning Flag: Create alert for detected patterns in overview
+            console.log(`🚩 FLAG triggered by rule: ${rule.name}`);
+            triggeredFlags.push({ 
+              name: rule.name, 
+              modifier: rule.risk_modifier || 20,
+              severity: 'medium'
+            });
+            break;
+          case 'add_risk':
+            // Increase Risk Score: Decrease trust score based on ML risk
+            // Formula: trustScoreDecrease = 100 - mlRiskScore (so 90% risk = -10 trust)
+            const trustDecrease = 100 - mlRiskScore;
+            console.log(`⚠️ RISK MODIFIER triggered by rule: ${rule.name}, trust decrease: ${trustDecrease}`);
+            triggeredRiskModifiers.push({ 
+              name: rule.name, 
+              riskModifier: rule.risk_modifier || 20,
+              trustScoreDecrease: Math.max(0, trustDecrease),
+              mlRiskScore: mlRiskScore
+            });
+            break;
+          default:
+            console.log(`Unknown action "${rule.action}" for rule: ${rule.name}, treating as flag`);
+            triggeredFlags.push({ name: rule.name, modifier: rule.risk_modifier || 20 });
+        }
       }
     });
 
-    return {
+    const result = {
       block: triggeredBlocks.length > 0,
       blockReasons: triggeredBlocks,
-      flags: triggeredFlags
+      flags: triggeredFlags,  // Warning flags for detected patterns
+      riskModifiers: triggeredRiskModifiers  // Risk score modifiers for trust score
     };
+    
+    console.log('Rule evaluation result:', result);
+    return result;
   };
 
   const analyzeRisk = async () => {
@@ -459,7 +581,10 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         })
       });
 
+      console.log('API response status:', response.status, 'ok:', response.ok);
+
       if (response.ok) {
+        console.log('✅ API SUCCESS PATH - will evaluate rules and create alerts');
         const result = await response.json();
         let analysis = result.risk_assessment;
 
@@ -511,11 +636,16 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
 
         const ruleCheck = evaluateRules(analysis);
         const totalModifier = ruleCheck.flags.reduce((sum, f) => sum + f.modifier, 0);
+        const riskModifierTotal = ruleCheck.riskModifiers.reduce((sum, m) => sum + m.riskModifier, 0);
 
         analysis = {
           ...analysis,
-          risk_score: Math.min(100, (analysis.risk_score || 0) + totalModifier),
-          factors: [...ruleCheck.flags.map(f => `🚩 RULE: ${f.name}`), ...(analysis.factors || [])],
+          risk_score: Math.min(100, (analysis.risk_score || 0) + totalModifier + riskModifierTotal),
+          factors: [
+            ...ruleCheck.flags.map(f => `🚩 WARNING FLAG: ${f.name}`),
+            ...ruleCheck.riskModifiers.map(m => `⚠️ RISK INCREASED: ${m.name} (Trust -${m.trustScoreDecrease})`),
+            ...(analysis.factors || [])
+          ],
         };
 
         if (ruleCheck.block) {
@@ -523,19 +653,17 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
           analysis.factors = [`🚫 BLOCKED BY ADMIN RULE: ${ruleCheck.blockReasons[0]}`, ...analysis.factors];
         }
 
-        // Alerting for Security Events (Blocks or Flags)
-        if (analysis.should_block || ruleCheck.flags.length > 0) {
-          try {
-            addDoc(collection(db, 'alerts'), {
-              type: analysis.should_block ? 'BLOCK' : 'FLAG',
-              severity: analysis.should_block ? 'high' : 'medium',
-              title: analysis.should_block ? 'Transaction Blocked' : 'Security Flag Raised',
-              message: analysis.should_block
-                ? `Transaction of ₹${amount} was blocked by security rules.`
-                : `Security warning raised for ₹${amount} transaction.`,
-              details: analysis.should_block
-                ? ruleCheck.blockReasons.join(', ')
-                : ruleCheck.flags.map(f => f.name).join(', '),
+        // Handle alerts based on rule action types
+        console.log('📢 About to create alerts. Block:', ruleCheck.block, 'Flags:', ruleCheck.flags.length, 'RiskMods:', ruleCheck.riskModifiers.length);
+        try {
+          // 1. IMMEDIATE BLOCK - Alert in Alerts Panel
+          if (ruleCheck.block) {
+            await addDoc(collection(db, 'alerts'), {
+              type: 'BLOCK',
+              severity: 'high',
+              title: 'Transaction Blocked',
+              message: `Transaction of ₹${amount} was blocked by security rules.`,
+              details: ruleCheck.blockReasons.join(', '),
               transaction_amount: Number(amount),
               sender_upi: senderUPI,
               recipient_upi: upiId,
@@ -543,21 +671,228 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
               createdAt: serverTimestamp(),
               read: false
             });
-          } catch (e) { }
+          }
+          
+          // 2. RAISE WARNING FLAG - Alert in Detected Patterns (Overview)
+          if (ruleCheck.flags.length > 0) {
+            console.log('🚩 [analyzeRisk] Creating FLAG alert for', ruleCheck.flags.length, 'flags');
+            const flagAlertData = {
+              type: 'FLAG',
+              severity: 'medium',
+              title: 'Security Pattern Detected',
+              message: `Warning flag raised for ₹${amount} transaction - matches ${ruleCheck.flags.length} rule pattern(s).`,
+              details: ruleCheck.flags.map(f => f.name).join(', '),
+              pattern: ruleCheck.flags.map(f => f.name).join('; '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              risk_score: analysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            };
+            console.log('FLAG alert data:', flagAlertData);
+            const docRef = await addDoc(collection(db, 'alerts'), flagAlertData);
+            console.log('✅ [analyzeRisk] FLAG alert created with ID:', docRef.id);
+          } else {
+            console.log('No flags triggered in analyzeRisk');
+          }
+          
+          // 3. INCREASE RISK SCORE - Decrease Trust Score in recipient's profile
+          if (ruleCheck.riskModifiers.length > 0) {
+            // Update recipient's trust score in Firestore
+            const totalTrustDecrease = ruleCheck.riskModifiers.reduce((sum, m) => sum + m.trustScoreDecrease, 0);
+            
+            const usersRef = collection(db, "users");
+            const q = query(usersRef, where("upiId", "==", upiId.toLowerCase()));
+            const snapshot = await getDocs(q);
+            
+            if (!snapshot.empty) {
+              const { updateDoc } = await import("firebase/firestore");
+              const userDoc = snapshot.docs[0];
+              const currentTrust = userDoc.data()?.transactionDetails?.socialTrustScore || 100;
+              const newTrustScore = Math.max(0, currentTrust - totalTrustDecrease);
+              
+              await updateDoc(userDoc.ref, {
+                'transactionDetails.socialTrustScore': newTrustScore
+              });
+            }
+            
+            // Create alert for the risk modification
+            await addDoc(collection(db, 'alerts'), {
+              type: 'RISK_MODIFIER',
+              severity: 'medium',
+              title: 'Trust Score Modified',
+              message: `Trust score decreased by ${totalTrustDecrease} for ${upiId} due to risk rules.`,
+              details: ruleCheck.riskModifiers.map(m => `${m.name} (Risk: ${m.mlRiskScore}%)`).join(', '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              trust_decrease: totalTrustDecrease,
+              risk_score: analysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+          }
+        } catch (alertError) {
+          console.error('Error creating alerts:', alertError);
         }
 
         setRiskAnalysis(analysis);
         setCurrentStep('risk_review');
       } else {
-
-        const offlineAnalysis = generateOfflineRiskAnalysis();
+        // API failed - use offline analysis but still evaluate rules
+        console.log('API failed, using offline analysis');
+        let offlineAnalysis = generateOfflineRiskAnalysis();
+        
+        // Still evaluate rules even in offline mode
+        const ruleCheck = evaluateRules(offlineAnalysis);
+        console.log('Offline mode - Rule check result:', ruleCheck);
+        
+        // Apply rule modifiers to analysis
+        const totalModifier = ruleCheck.flags.reduce((sum, f) => sum + f.modifier, 0);
+        const riskModifierTotal = ruleCheck.riskModifiers.reduce((sum, m) => sum + m.riskModifier, 0);
+        
+        offlineAnalysis = {
+          ...offlineAnalysis,
+          risk_score: Math.min(100, (offlineAnalysis.risk_score || 0) + totalModifier + riskModifierTotal),
+          factors: [
+            ...ruleCheck.flags.map(f => `🚩 WARNING FLAG: ${f.name}`),
+            ...ruleCheck.riskModifiers.map(m => `⚠️ RISK INCREASED: ${m.name}`),
+            ...(offlineAnalysis.factors || [])
+          ],
+        };
+        
+        if (ruleCheck.block) {
+          offlineAnalysis.should_block = true;
+          offlineAnalysis.factors = [`🚫 BLOCKED BY ADMIN RULE: ${ruleCheck.blockReasons[0]}`, ...offlineAnalysis.factors];
+        }
+        
+        // Create alerts for triggered rules
+        try {
+          if (ruleCheck.block) {
+            console.log('🚫 [offline] Creating BLOCK alert');
+            await addDoc(collection(db, 'alerts'), {
+              type: 'BLOCK',
+              severity: 'high',
+              title: 'Transaction Blocked',
+              message: `Transaction of ₹${amount} was blocked by security rules.`,
+              details: ruleCheck.blockReasons.join(', '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              risk_score: offlineAnalysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+          }
+          
+          if (ruleCheck.flags.length > 0) {
+            console.log('🚩 [offline] Creating FLAG alert for', ruleCheck.flags.length, 'flags');
+            const docRef = await addDoc(collection(db, 'alerts'), {
+              type: 'FLAG',
+              severity: 'medium',
+              title: 'Security Pattern Detected',
+              message: `Warning flag raised for ₹${amount} transaction.`,
+              details: ruleCheck.flags.map(f => f.name).join(', '),
+              pattern: ruleCheck.flags.map(f => f.name).join('; '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              risk_score: offlineAnalysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+            console.log('✅ [offline] FLAG alert created:', docRef.id);
+          }
+          
+          if (ruleCheck.riskModifiers.length > 0) {
+            const totalTrustDecrease = ruleCheck.riskModifiers.reduce((sum, m) => sum + m.trustScoreDecrease, 0);
+            await addDoc(collection(db, 'alerts'), {
+              type: 'RISK_MODIFIER',
+              severity: 'medium',
+              title: 'Trust Score Modified',
+              message: `Trust score impact for ${upiId} due to risk rules.`,
+              details: ruleCheck.riskModifiers.map(m => m.name).join(', '),
+              transaction_amount: Number(amount),
+              sender_upi: senderUPI,
+              recipient_upi: upiId,
+              trust_decrease: totalTrustDecrease,
+              risk_score: offlineAnalysis.risk_score,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+          }
+        } catch (alertError) {
+          console.error('Error creating alerts in offline mode:', alertError);
+        }
+        
         setRiskAnalysis(offlineAnalysis);
         setCurrentStep('risk_review');
       }
     } catch (error) {
       console.error('Risk analysis failed:', error);
+      
+      // Error case - still evaluate rules
+      let offlineAnalysis = generateOfflineRiskAnalysis();
+      
+      const ruleCheck = evaluateRules(offlineAnalysis);
+      console.log('Error fallback - Rule check result:', ruleCheck);
+      
+      // Apply rule modifiers
+      const totalModifier = ruleCheck.flags.reduce((sum, f) => sum + f.modifier, 0);
+      offlineAnalysis = {
+        ...offlineAnalysis,
+        risk_score: Math.min(100, (offlineAnalysis.risk_score || 0) + totalModifier),
+        factors: [
+          ...ruleCheck.flags.map(f => `🚩 WARNING FLAG: ${f.name}`),
+          ...(offlineAnalysis.factors || [])
+        ],
+      };
+      
+      if (ruleCheck.block) {
+        offlineAnalysis.should_block = true;
+        offlineAnalysis.factors = [`🚫 BLOCKED BY ADMIN RULE: ${ruleCheck.blockReasons[0]}`, ...offlineAnalysis.factors];
+      }
+      
+      // Create alerts even on error
+      try {
+        if (ruleCheck.block) {
+          await addDoc(collection(db, 'alerts'), {
+            type: 'BLOCK',
+            severity: 'high',
+            title: 'Transaction Blocked',
+            message: `Transaction of ₹${amount} was blocked by security rules.`,
+            details: ruleCheck.blockReasons.join(', '),
+            transaction_amount: Number(amount),
+            sender_upi: senderUPI,
+            recipient_upi: upiId,
+            risk_score: offlineAnalysis.risk_score,
+            createdAt: serverTimestamp(),
+            read: false
+          });
+        }
+        
+        if (ruleCheck.flags.length > 0) {
+          console.log('🚩 [error fallback] Creating FLAG alert');
+          await addDoc(collection(db, 'alerts'), {
+            type: 'FLAG',
+            severity: 'medium',
+            title: 'Security Pattern Detected',
+            message: `Warning flag raised for ₹${amount} transaction.`,
+            details: ruleCheck.flags.map(f => f.name).join(', '),
+            pattern: ruleCheck.flags.map(f => f.name).join('; '),
+            transaction_amount: Number(amount),
+            sender_upi: senderUPI,
+            recipient_upi: upiId,
+            risk_score: offlineAnalysis.risk_score,
+            createdAt: serverTimestamp(),
+            read: false
+          });
+        }
+      } catch (alertError) {
+        console.error('Error creating alerts in error fallback:', alertError);
+      }
 
-      const offlineAnalysis = generateOfflineRiskAnalysis();
       setRiskAnalysis(offlineAnalysis);
       setCurrentStep('risk_review');
     } finally {
@@ -566,13 +901,17 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
   };
 
   const handleConfirm = async () => {
+    console.log('🔵 handleConfirm called - will evaluate rules and create alerts');
 
     // 0. CHECK RULES FIRST - REAL TIME ENFORCEMENT
     const ruleCheck = evaluateRules();
+    console.log('🔵 handleConfirm rule check:', ruleCheck);
+    
+    // Handle IMMEDIATE BLOCK action
     if (ruleCheck.block) {
       setIsAdminBlocked(true);
 
-      // Create Admin Alert
+      // Create Admin Alert for BLOCK
       try {
         await addDoc(collection(db, 'alerts'), {
           type: 'BLOCK',
@@ -597,6 +936,75 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
       }));
       setCurrentStep('blocked');
       return;
+    }
+
+    // Handle WARNING FLAG action - Create alert in detected patterns
+    if (ruleCheck.flags.length > 0) {
+      console.log('🚩 Creating FLAG alert for', ruleCheck.flags.length, 'flags:', ruleCheck.flags.map(f => f.name));
+      try {
+        const flagAlert = {
+          type: 'FLAG',
+          severity: 'medium',
+          title: 'Security Pattern Detected',
+          message: `Warning flag raised for ₹${amount} transaction from ${senderUPI}.`,
+          details: ruleCheck.flags.map(f => f.name).join(', '),
+          pattern: ruleCheck.flags.map(f => f.name).join('; '),
+          transaction_amount: Number(amount),
+          sender_upi: senderUPI,
+          recipient_upi: upiId,
+          risk_score: riskAnalysis?.risk_score || 0,
+          createdAt: serverTimestamp(),
+          read: false
+        };
+        console.log('FLAG alert data:', flagAlert);
+        const docRef = await addDoc(collection(db, 'alerts'), flagAlert);
+        console.log('✅ FLAG alert created with ID:', docRef.id);
+      } catch (e) {
+        console.error("❌ Warning flag alert failed:", e);
+      }
+    } else {
+      console.log('No flags triggered, skipping FLAG alert creation');
+    }
+
+    // Handle INCREASE RISK SCORE action - Decrease trust score
+    if (ruleCheck.riskModifiers.length > 0) {
+      try {
+        const totalTrustDecrease = ruleCheck.riskModifiers.reduce((sum, m) => sum + m.trustScoreDecrease, 0);
+        
+        // Update recipient's trust score in Firestore
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("upiId", "==", upiId.toLowerCase()));
+        const snapshot = await getDocs(q);
+        
+        if (!snapshot.empty) {
+          const { updateDoc } = await import("firebase/firestore");
+          const userDoc = snapshot.docs[0];
+          const currentTrust = userDoc.data()?.transactionDetails?.socialTrustScore || 100;
+          const newTrustScore = Math.max(0, currentTrust - totalTrustDecrease);
+          
+          await updateDoc(userDoc.ref, {
+            'transactionDetails.socialTrustScore': newTrustScore
+          });
+        }
+        
+        // Create alert for trust score modification
+        await addDoc(collection(db, 'alerts'), {
+          type: 'RISK_MODIFIER',
+          severity: 'medium',
+          title: 'Trust Score Modified',
+          message: `Trust score decreased by ${totalTrustDecrease} for ${upiId} due to risk rules.`,
+          details: ruleCheck.riskModifiers.map(m => `${m.name} (Risk: ${m.mlRiskScore}%)`).join(', '),
+          transaction_amount: Number(amount),
+          sender_upi: senderUPI,
+          recipient_upi: upiId,
+          trust_decrease: totalTrustDecrease,
+          risk_score: riskAnalysis?.risk_score || 0,
+          createdAt: serverTimestamp(),
+          read: false
+        });
+      } catch (e) {
+        console.error("Risk modifier processing failed:", e);
+      }
     }
 
     if (!riskAnalysis) {
@@ -632,7 +1040,6 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         transactionData.remarks = remarks;
       }
 
-
       await addDoc(collection(db, "transactions"), transactionData);
       await addDoc(collection(db, "transactions"), {
         ...transactionData,
@@ -659,6 +1066,7 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
         read: false,
         createdAt: serverTimestamp(),
       });
+
 
       await refreshData();
       setCurrentStep("success");
@@ -1163,7 +1571,51 @@ const TransactionSimulation = ({ upiId, amount, remarks, senderUPI, onClose, ini
                 </Button>
               )}
               <Button
-                onClick={onClose}
+                onClick={async () => {
+                  if (isAdminBlocked) {
+                    // Create detailed BLOCK alert in Firebase when user acknowledges
+                    try {
+                      await addDoc(collection(db, 'alerts'), {
+                        type: 'BLOCK',
+                        severity: 'high',
+                        title: 'Transaction Blocked - User Acknowledged',
+                        message: `Transaction of ₹${amount} from ${senderUPI} to ${upiId} was blocked and acknowledged by user.`,
+                        details: riskAnalysis?.factors?.filter(f => f.includes('BLOCKED')).map(f => f.replace('🚫 BLOCKED BY ADMIN RULE: ', '')).join(', ') || 'Security Rule',
+                        transaction_amount: Number(amount),
+                        sender_upi: senderUPI,
+                        recipient_upi: upiId,
+                        remarks: remarks || '',
+                        risk_score: riskAnalysis?.risk_score || 0,
+                        risk_level: riskAnalysis?.risk_level || 'high',
+                        all_factors: riskAnalysis?.factors || [],
+                        recipient_profile: recipientProfileData ? {
+                          blacklist_status: recipientProfileData.params?.recipientBlacklistStatus,
+                          verification_status: recipientProfileData.params?.recipientVerificationStatus,
+                          fraud_complaints: recipientProfileData.params?.fraudComplaintsCount,
+                          account_age: recipientProfileData.params?.accountAge,
+                          social_trust_score: recipientProfileData.params?.socialTrustScore,
+                          vpn_usage: recipientProfileData.params?.vpnProxyUsage,
+                          geo_location: recipientProfileData.params?.geoLocationFlags
+                        } : null,
+                        user_device: {
+                          userAgent: navigator.userAgent,
+                          platform: navigator.platform,
+                          screen: `${window.screen.width}x${window.screen.height}`,
+                          language: navigator.language
+                        },
+                        blocked_at: serverTimestamp(),
+                        acknowledged_at: serverTimestamp(),
+                        createdAt: serverTimestamp(),
+                        read: false,
+                        status: 'acknowledged'
+                      });
+                      console.log('Block alert created successfully');
+                    } catch (error) {
+                      console.error('Failed to create block alert:', error);
+                    }
+                  }
+                  onClose();
+                }}
                 className={`h-11 rounded-xl ${isAdminBlocked ? 'w-full bg-red-600 hover:bg-red-700' : 'flex-1 bg-slate-800 hover:bg-slate-900'}`}
               >
                 {isAdminBlocked ? 'Understood' : 'Cancel'}

@@ -11,7 +11,6 @@ import {
   QrCode,
   Send,
   Settings,
-  Shield,
   Wallet,
   Zap
 } from 'lucide-react';
@@ -41,7 +40,6 @@ export default function SidebarContent() {
 
   const toolsNavItems = [
     { icon: Settings, label: "Fraud Settings", path: "/settings", badge: null },
-    { icon: Shield, label: "Admin Panel", path: "/admin", badge: null },
     { icon: Help, label: "Help Center", path: "/help-support", badge: null },
   ];
 

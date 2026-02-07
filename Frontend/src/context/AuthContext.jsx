@@ -1,5 +1,5 @@
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../components/logic/firebase';
 
@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   const [totalReceived, setTotalReceived] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const fetchTransactions = async (upiId) => {
     if (!upiId) return;
@@ -138,8 +139,27 @@ export function AuthProvider({ children }) {
           if (userDoc.exists()) {
             const data = userDoc.data();
             setUserData(data);
+            setIsAdmin(data.role === 'admin');
             
-            await fetchTransactions(data.upiId);
+            if (data.role !== 'admin') {
+              await fetchTransactions(data.upiId);
+            }
+          } else {
+            // Check if email/password user (admin)
+            const isEmailPassword = currentUser.providerData.some(p => p.providerId === 'password');
+            if (isEmailPassword) {
+              const adminData = {
+                uid: currentUser.uid,
+                name: currentUser.displayName || currentUser.email?.split('@')[0] || 'Admin',
+                email: currentUser.email,
+                photoURL: currentUser.photoURL || null,
+                role: 'admin',
+                createdAt: serverTimestamp(),
+              };
+              await setDoc(userRef, adminData);
+              setUserData(adminData);
+              setIsAdmin(true);
+            }
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -147,6 +167,7 @@ export function AuthProvider({ children }) {
       } else {
         setUser(null);
         setUserData(null);
+        setIsAdmin(false);
         setTransactions([]);
         setBalance(10000);
         setTotalSpending(0);
@@ -163,6 +184,7 @@ export function AuthProvider({ children }) {
       user, 
       userData, 
       loading, 
+      isAdmin,
       balance, 
       transactions, 
       totalSpending, 

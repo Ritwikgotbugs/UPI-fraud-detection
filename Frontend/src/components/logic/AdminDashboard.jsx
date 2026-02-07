@@ -36,8 +36,7 @@ import {
 import { useEffect, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { db } from './firebase';
-import MobileNav from "./MobileNav";
-import SidebarContent from "./SidebarContent";
+import AdminLayout from "./AdminLayout";
 
 const API_BASE = 'https://rxcq.pythonanywhere.com';
 
@@ -343,7 +342,7 @@ const DATASET_EXAMPLES = {
   ]
 };
 
-const AdminDashboard = () => {
+const AdminDashboard = ({ tab = 'overview' }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [rules, setRules] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -351,7 +350,7 @@ const AdminDashboard = () => {
   const [weights, setWeights] = useState({});
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
+  const activeTab = tab;
   const [simulationResult, setSimulationResult] = useState(null);
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenario, setSelectedScenario] = useState('normal');
@@ -1125,17 +1124,7 @@ const AdminDashboard = () => {
 
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-slate-200/50 bg-white/80 backdrop-blur-xl">
-        <SidebarContent />
-      </aside>
-
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Navigation */}
-        <MobileNav />
-
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+    <AdminLayout>
           {/* API Error Banner */}
           {apiError && (
             <Alert className="mb-4 bg-amber-50 border-amber-200 text-amber-800">
@@ -1161,28 +1150,6 @@ const AdminDashboard = () => {
             <Button onClick={fetchDashboardData} variant="outline" className="gap-2 border-slate-200 text-slate-600 hover:bg-slate-50 w-full sm:w-auto">
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-2 mb-6 flex-wrap overflow-x-auto pb-2">
-            {['overview', 'rules', 'simulation', 'alerts', 'settings'].map((tab) => (
-              <Button
-                key={tab}
-                variant={activeTab === tab ? 'default' : 'outline'}
-                onClick={() => setActiveTab(tab)}
-                size="sm"
-                className={`capitalize whitespace-nowrap ${activeTab === tab
-                  ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-              >
-                {tab === 'overview' && <BarChart3 className="h-4 w-4 mr-1 md:mr-2" />}
-                {tab === 'rules' && <GitBranch className="h-4 w-4 mr-1 md:mr-2" />}
-                {tab === 'simulation' && <Play className="h-4 w-4 mr-1 md:mr-2" />}
-                {tab === 'alerts' && <AlertTriangle className="h-4 w-4 mr-1 md:mr-2" />}
-                {tab === 'settings' && <Settings className="h-4 w-4 mr-2" />}
-                {tab}
-              </Button>
-            ))}
           </div>
 
           {/* Overview Tab */}
@@ -2270,9 +2237,7 @@ const AdminDashboard = () => {
               </Card>
             </motion.div>
           )}
-        </main>
-      </div>
-    </div>
+    </AdminLayout>
   );
 };
 

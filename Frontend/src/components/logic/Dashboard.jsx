@@ -718,6 +718,15 @@ const Dashboard = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              {tx.riskScore != null && tx.riskScore > 0 && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                  tx.riskLevel === 'high' ? 'bg-red-100 text-red-600' :
+                                  tx.riskLevel === 'medium' ? 'bg-amber-100 text-amber-600' :
+                                  'bg-emerald-100 text-emerald-600'
+                                }`}>
+                                  {tx.riskScore}%
+                                </span>
+                              )}
                               <p className={`text-xs font-semibold ${tx.transactionType === 'received' ? 'text-emerald-600' : 'text-rose-600'}`}>
                                 {tx.transactionType === 'received' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN')}
                               </p>

@@ -3,6 +3,15 @@ import { useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
 import PredictForm from '../PredictForm';
 import AdminDashboard from './components/logic/AdminDashboard';
+import RiskEvents from './components/logic/admin/RiskEvents';
+import Devices from './components/logic/admin/Devices';
+import Customers from './components/logic/admin/Customers';
+import AnalyticsPage from './components/logic/admin/Analytics';
+import Reports from './components/logic/admin/Reports';
+import MetricWeights from './components/logic/admin/MetricWeights';
+import ScoringMetrics from './components/logic/admin/ScoringMetrics';
+import BehavioralLearning from './components/logic/admin/BehavioralLearning';
+import Alerts from './components/logic/admin/Alerts';
 import Dashboard from './components/logic/Dashboard';
 import HelpCenter from './components/logic/HelpCenter';
 import Homepage from './components/logic/homepage';
@@ -29,6 +38,42 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const UserRoute = ({ children }) => {
+  const { user, isAdmin, loading } = useAuth();
+  
+  if (loading) {
+    return null;
+  }
+  
+  if (!user) {
+    return <Navigate to="/signin" replace />;
+  }
+  
+  if (isAdmin) {
+    return <Navigate to="/admin/overview" replace />;
+  }
+  
+  return children;
+};
+
+const AdminRoute = ({ children }) => {
+  const { user, isAdmin, loading } = useAuth();
+  
+  if (loading) {
+    return null;
+  }
+  
+  if (!user) {
+    return <Navigate to="/signin" replace />;
+  }
+  
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
+
 const RouteTitleUpdater = () => {
   const location = useLocation();
 
@@ -38,7 +83,19 @@ const RouteTitleUpdater = () => {
       '/dashboard': 'Fraudulent.ai - Dashboard',
       '/send-money': 'Fraudulent.ai - Send Money',
       '/transactions': 'Fraudulent.ai - Transactions',
-      '/admin': 'Fraudulent.ai - Admin Dashboard',
+      '/admin/overview': 'Fraudulent.ai - Admin Overview',
+      '/admin/rules': 'Fraudulent.ai - Admin Rules',
+      '/admin/simulation': 'Fraudulent.ai - Admin Simulation',
+      '/admin/alerts': 'Fraudulent.ai - Admin Alerts',
+      '/admin/settings': 'Fraudulent.ai - Admin Settings',
+      '/admin/risk-events': 'Fraudulent.ai - Risk Events',
+      '/admin/devices': 'Fraudulent.ai - Devices',
+      '/admin/customers': 'Fraudulent.ai - Customers',
+      '/admin/analytics': 'Fraudulent.ai - Analytics',
+      '/admin/reports': 'Fraudulent.ai - Reports',
+      '/admin/metric-weights': 'Fraudulent.ai - Metric Weights',
+      '/admin/scoring-metrics': 'Fraudulent.ai - Scoring Metrics',
+      '/admin/behavioral': 'Fraudulent.ai - Behavioral Learning',
       '/settings': 'Fraudulent.ai - Settings',
       '/report-fraud': 'Fraudulent.ai - Report Fraud',
       '/help-support': 'Fraudulent.ai - Help & Support',
@@ -83,15 +140,31 @@ const AppContent = () => {
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           <Route path="/" element={<motion.div {...pageTransition}><LandingPage /></motion.div>} />
-          <Route path="/dashboard" element={<motion.div {...pageTransition}><ProtectedRoute><Dashboard /></ProtectedRoute></motion.div>} />
-          <Route path="/send-money" element={<motion.div {...pageTransition}><ProtectedRoute><Homepage /></ProtectedRoute></motion.div>} />
-          <Route path="/transactions" element={<motion.div {...pageTransition}><ProtectedRoute><Recent /></ProtectedRoute></motion.div>} />
-          <Route path="/admin" element={<motion.div {...pageTransition}><ProtectedRoute><AdminDashboard /></ProtectedRoute></motion.div>} />
-          <Route path="/report-fraud" element={<motion.div {...pageTransition}><ProtectedRoute><ReportFraud /></ProtectedRoute></motion.div>} />
-          <Route path="/statements" element={<motion.div {...pageTransition}><ProtectedRoute><Homepage /></ProtectedRoute></motion.div>} />
-          <Route path="/beneficiaries" element={<motion.div {...pageTransition}><ProtectedRoute><Homepage /></ProtectedRoute></motion.div>} />
-          <Route path="/settings" element={<motion.div {...pageTransition}><ProtectedRoute><Settings /></ProtectedRoute></motion.div>} />
-          <Route path="/help-support" element={<motion.div {...pageTransition}><ProtectedRoute><HelpCenter /></ProtectedRoute></motion.div>} />
+          {/* User Routes */}
+          <Route path="/dashboard" element={<motion.div {...pageTransition}><UserRoute><Dashboard /></UserRoute></motion.div>} />
+          <Route path="/send-money" element={<motion.div {...pageTransition}><UserRoute><Homepage /></UserRoute></motion.div>} />
+          <Route path="/transactions" element={<motion.div {...pageTransition}><UserRoute><Recent /></UserRoute></motion.div>} />
+          <Route path="/report-fraud" element={<motion.div {...pageTransition}><UserRoute><ReportFraud /></UserRoute></motion.div>} />
+          <Route path="/statements" element={<motion.div {...pageTransition}><UserRoute><Homepage /></UserRoute></motion.div>} />
+          <Route path="/beneficiaries" element={<motion.div {...pageTransition}><UserRoute><Homepage /></UserRoute></motion.div>} />
+          <Route path="/settings" element={<motion.div {...pageTransition}><UserRoute><Settings /></UserRoute></motion.div>} />
+          <Route path="/help-support" element={<motion.div {...pageTransition}><UserRoute><HelpCenter /></UserRoute></motion.div>} />
+          {/* Admin Routes */}
+          <Route path="/admin" element={<motion.div {...pageTransition}><AdminRoute><Navigate to="/admin/overview" replace /></AdminRoute></motion.div>} />
+          <Route path="/admin/overview" element={<motion.div {...pageTransition}><AdminRoute><AdminDashboard tab="overview" /></AdminRoute></motion.div>} />
+          <Route path="/admin/rules" element={<motion.div {...pageTransition}><AdminRoute><AdminDashboard tab="rules" /></AdminRoute></motion.div>} />
+          <Route path="/admin/simulation" element={<motion.div {...pageTransition}><AdminRoute><AdminDashboard tab="simulation" /></AdminRoute></motion.div>} />
+          <Route path="/admin/alerts" element={<motion.div {...pageTransition}><AdminRoute><Alerts /></AdminRoute></motion.div>} />
+          <Route path="/admin/settings" element={<motion.div {...pageTransition}><AdminRoute><AdminDashboard tab="settings" /></AdminRoute></motion.div>} />
+          <Route path="/admin/risk-events" element={<motion.div {...pageTransition}><AdminRoute><RiskEvents /></AdminRoute></motion.div>} />
+          <Route path="/admin/devices" element={<motion.div {...pageTransition}><AdminRoute><Devices /></AdminRoute></motion.div>} />
+          <Route path="/admin/customers" element={<motion.div {...pageTransition}><AdminRoute><Customers /></AdminRoute></motion.div>} />
+          <Route path="/admin/analytics" element={<motion.div {...pageTransition}><AdminRoute><AnalyticsPage /></AdminRoute></motion.div>} />
+          <Route path="/admin/reports" element={<motion.div {...pageTransition}><AdminRoute><Reports /></AdminRoute></motion.div>} />
+          <Route path="/admin/metric-weights" element={<motion.div {...pageTransition}><AdminRoute><MetricWeights /></AdminRoute></motion.div>} />
+          <Route path="/admin/scoring-metrics" element={<motion.div {...pageTransition}><AdminRoute><ScoringMetrics /></AdminRoute></motion.div>} />
+          <Route path="/admin/behavioral" element={<motion.div {...pageTransition}><AdminRoute><BehavioralLearning /></AdminRoute></motion.div>} />
+          {/* Common Routes */}
           <Route path="/signin" element={<motion.div {...pageTransition}><SignIn /></motion.div>} />
           <Route path="/predict" element={<motion.div {...pageTransition}><PredictForm /></motion.div>} />
           <Route path="*" element={<motion.div {...pageTransition}><NotFound /></motion.div>} />

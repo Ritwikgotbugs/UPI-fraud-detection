@@ -14,10 +14,13 @@ import os
 
 
 from fraud_detection_engine import fraud_engine, FraudDetectionEngine, FEATURE_NAMES
+from core_pages import register_core_routes
 
 app = Flask(__name__)
 
 CORS(app)
+
+register_core_routes(app)
 
 
 ml_model = None
@@ -27,12 +30,12 @@ try:
         ml_model = pickle.load(file)
     
     fraud_engine.set_ml_model(ml_model)
-    print("✅ ML model loaded and integrated with fraud engine successfully")
+    print("[OK] ML model loaded and integrated with fraud engine successfully")
     print(f"   Model type: {type(ml_model).__name__}")
     if hasattr(ml_model, 'n_features_in_'):
         print(f"   Features expected: {ml_model.n_features_in_}")
 except Exception as e:
-    print(f"⚠️ Warning: ML model not loaded: {e}")
+    print(f"[WARN] Warning: ML model not loaded: {e}")
     print("   Running in rule-based fallback mode")
 
 
@@ -198,32 +201,32 @@ def predict():
             
             factors = []
             if features['recipient_blacklist_status'] == 1:
-                factors.append('⛔ Recipient is on BLACKLIST')
+                factors.append('[BLOCK] Recipient is on BLACKLIST')
             if features['vpn_proxy_usage'] == 1:
-                factors.append('🔒 VPN/Proxy usage detected')
+                factors.append('[VPN] VPN/Proxy usage detected')
             if features['geo_location_flags'] == 'high-risk':
-                factors.append('📍 Transaction from HIGH-RISK geo-location')
+                factors.append('[GEO] Transaction from HIGH-RISK geo-location')
             if features['high_risk_transaction_times'] == 1:
-                factors.append('🕐 Transaction at high-risk time')
+                factors.append('[TIME] Transaction at high-risk time')
             if features['fraud_complaints_count'] > 0:
-                factors.append(f'⚠️ {features["fraud_complaints_count"]} fraud complaint(s) on record')
+                factors.append(f'[WARN] {features["fraud_complaints_count"]} fraud complaint(s) on record')
             if features['recipient_verification_status'] == 'recently_registered':
-                factors.append('🆕 Recipient is recently registered')
+                factors.append('[NEW] Recipient is recently registered')
             if features['transaction_amount'] > 1000:
-                factors.append(f'💰 High transaction amount: ₹{features["transaction_amount"]}')
+                factors.append(f'[AMT] High transaction amount: Rs.{features["transaction_amount"]}')
             if features['social_trust_score'] < 30:
-                factors.append(f'📉 Low social trust score: {features["social_trust_score"]}')
+                factors.append(f'[LOW] Low social trust score: {features["social_trust_score"]}')
             if features['past_fraudulent_behavior_flags'] == 1:
-                factors.append('🚩 Past fraudulent behavior detected')
+                factors.append('[FLAG] Past fraudulent behavior detected')
             if features['location_inconsistent_transactions'] == 1:
-                factors.append('🌍 Location inconsistent with history')
+                factors.append('[LOC] Location inconsistent with history')
             if features['user_daily_limit_exceeded'] == 1:
-                factors.append('📊 User daily limit exceeded')
+                factors.append('[LIMIT] User daily limit exceeded')
             if features['normalized_transaction_amount'] > 0.5:
-                factors.append(f'📈 Normalized amount above threshold: {features["normalized_transaction_amount"]:.2f}')
+                factors.append(f'[HIGH] Normalized amount above threshold: {features["normalized_transaction_amount"]:.2f}')
             
             if not factors:
-                factors.append('✅ No significant risk factors detected')
+                factors.append('[OK] No significant risk factors detected')
             
             return jsonify({
                 "prediction": prediction.tolist(),

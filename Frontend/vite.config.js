@@ -31,6 +31,7 @@ export default defineConfig({
       url: 'url',
       'source-map': 'source-map-js',
     },
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
     include: ['path-browserify', 'url', 'source-map-js'], // Include the browser-compatible versions for Vite to handle

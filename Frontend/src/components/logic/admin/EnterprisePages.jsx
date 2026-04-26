@@ -1,0 +1,42 @@
+import EnterpriseModulePage from "./EnterpriseModulePage";
+import { enterprisePageConfigs } from "./enterprisePageConfigs";
+
+const makePage = (configKey) => function Page() {
+  return <EnterpriseModulePage config={enterprisePageConfigs[configKey]} configKey={configKey} />;
+};
+
+export const DashboardV2Page = makePage("dashboard");
+export const EventsPage = makePage("events");
+export const DevicesV2Page = makePage("devices");
+export const CustomersV2Page = makePage("customers");
+export const AlertsV2Page = makePage("alerts");
+export const AnalyticsV2Page = makePage("analytics");
+export const FraudHeatMapPage = makePage("fraudHeatMap");
+export const ReportsV2Page = makePage("reports");
+export const ChallengeAnalyticsPage = makePage("challengeAnalytics");
+export const OutcomeLearningPage = makePage("outcomeLearning");
+export const ExperimentsPage = makePage("experiments");
+export const UIExperimentsPage = makePage("uiExperiments");
+export const PlatformSettingsPage = makePage("platformSettings");
+export const CategoryScoringPage = makePage("categoryScoring");
+export const MetricWeightsV2Page = makePage("metricWeights");
+export const V2ScoringPage = makePage("v2Scoring");
+export const ScoringMetricsV2Page = makePage("scoringMetrics");
+export const BehavioralPage = makePage("behavioral");
+export const ChallengeRulesPage = makePage("challengeRules");
+export const ChallengeProvidersPage = makePage("challengeProviders");
+export const SecretQuestionsPage = makePage("secretQuestions");
+export const IntelligencePage = makePage("intelligence");
+export const FraudToolsPage = makePage("fraudTools");
+export const EmulatorSignaturesPage = makePage("emulatorSignatures");
+export const TenantRetentionPage = makePage("tenantRetention");
+export const ApiKeysPage = makePage("apiKeys");
+export const ProvidersPage = makePage("providers");
+export const UsersPage = makePage("users");
+export const TenantsPage = makePage("tenants");
+export const AuditPage = makePage("audit");
+export const HubSpokePage = makePage("hubSpoke");
+export const HubSharingPage = makePage("hubSharing");
+export const CompliancePage = makePage("compliance");
+export const HealthPage = makePage("health");
+export const ImportPage = makePage("importData");

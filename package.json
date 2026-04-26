@@ -1,0 +1,10 @@
+{
+  "name": "upi-fraud-detection-root",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "frontend": "npm run dev --prefix Frontend",
+    "backend": "python Backend/app.py",
+    "start": "npx concurrently \"npm run dev --prefix Frontend\" \"python Backend/app.py\""
+  }
+}
